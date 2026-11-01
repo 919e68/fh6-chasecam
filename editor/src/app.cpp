@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "carmesh.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "preview.hpp"
@@ -439,6 +440,9 @@ void App::previewCard(float w, float h) {
     hudCard(dl, ImVec2(fb.x - g, fb.y - g), true,
             { { "Field of view", fov, nullptr, ON_GLASS }, { "Corner aim", std::string(aim) + "\xC2\xB0", nullptr, ON_GLASS },
               { "Horizon tilt", std::string(tlt) + "\xC2\xB0", nullptr, ON_GLASS } }, Stat);
+    // model attribution (CC BY), small and dim, bottom centre
+    float cw = textWidth(Caption, fh6::CAR_CREDIT);
+    drawText(dl, ImVec2((fa.x + fb.x - cw) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_DISABLED, fh6::CAR_CREDIT);
 }
 
 // Chart panel: label and value, a hairline grid, the response curve in orange,

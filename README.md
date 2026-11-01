@@ -87,6 +87,8 @@ sh editor/build.sh test          # C++ core
 
 ## Credits
 
+Preview car: ["Nissan Silvia Drift Tuned (S15)"](https://sketchfab.com/3d-models/nissan-silvia-drift-tuned-s15-84b63a057e36488589392a19b9313e2b) by [VuckyZ](https://sketchfab.com/VuckyZ123), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed: interior, suspension and brakes removed, simplified to about 3,900 triangles, rescaled, materials dropped (`editor/tools/s15_convert.py`).
+
 [Dear ImGui](https://github.com/ocornut/imgui) (MIT). Oxanium, Saira and JetBrains Mono fonts (SIL Open Font License, `editor/fonts/OFL-*.txt`); `editor/fonts/embed.sh` rebuilds the embedded copies.
 
 ## Note

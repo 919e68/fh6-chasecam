@@ -118,7 +118,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     };
     drawSmoke(true);
 
-    // car: the generated high-poly coupe (carmesh.cpp), see-through white with
+    // car: the S15 mesh (carmesh.cpp), see-through white with
     // yellow edge lines. All faces back to front, so the far side shows faintly
     // through the near side.
     V3 fwd(std::sin(in.heading), 0, std::cos(in.heading));
@@ -154,18 +154,17 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     for (size_t fi = 0; fi < mesh.faces.size(); fi++) {
         const auto& mf = mesh.faces[fi];
         Face f;
-        f.count = mf.n;
+        f.count = 3;
         V3 ctr, nrm;
-        for (int i = 0; i < mf.n; i++) {
+        for (int i = 0; i < 3; i++) {
             const V3& p0 = world[mf.idx[i]];
-            const V3& p1 = world[mf.idx[(i + 1) % mf.n]];
+            const V3& p1 = world[mf.idx[(i + 1) % 3]];
             f.c[i] = camv[mf.idx[i]]; // camera space
-            ctr = ctr + p0 * (1.0 / mf.n);
+            ctr = ctr + p0 * (1.0 / 3);
             nrm = nrm + V3((p0.y - p1.y) * (p0.z + p1.z), (p0.z - p1.z) * (p0.x + p1.x), (p0.x - p1.x) * (p0.y + p1.y)); // Newell
         }
         if (nrm.len() < 1e-12) continue;
         nrm = nrm.norm();
-        if (nrm.dot(ctr - P(mesh.inside[fi])) < 0) nrm = nrm * -1.0; // outward
         f.front = nrm.dot(v.pos - ctr) > 0;
         f.n = nrm;
         f.shade = (float)std::clamp(0.30 + 0.70 * std::max(0.0, nrm.dot(light)), 0.0, 1.0);
