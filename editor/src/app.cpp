@@ -148,7 +148,7 @@ void App::saveToGame() {
         fs::create_directories(bak, ec);
         for (const char* n : { "CameraSettings.ini", "CameraPhysics.xml" })
             if (fs::exists(out / n, ec)) fs::copy_file(out / n, bak / n, fs::copy_options::overwrite_existing, ec);
-        writePath(bak / "README.txt", "FH6 ChaseCam keeps the camera files that were here before its first save.\r\n"
+        writePath(bak / "README.txt", "Forza Horizon Camera Editor keeps the camera files that were here before its first save.\r\n"
                                       "Undo save in the editor puts them back. Empty means there were none.\r\n");
     }
     if (!writePath(out / "CameraSettings.ini", b.ini) || !writePath(out / "CameraPhysics.xml", b.xml)) {
@@ -261,7 +261,7 @@ void App::topBar(float w) {
     float mk = 16 * S;
     drawMark(dl, ImVec2(p0.x + g, cy - mk / 2), mk, rgb(ORANGE));
     float nx = p0.x + g + mk + SP3 * S;
-    drawText(dl, ImVec2(nx, cy - textHeight(Lockup) / 2 - 1 * S), Lockup, INK, "FH6 ChaseCam");
+    drawText(dl, ImVec2(nx, cy - textHeight(Lockup) / 2 - 1 * S), Lockup, INK, "Forza Horizon Camera Editor");
 
     // camera slot, right
     static const char* slots[] = { "Chase Near", "Chase Far" };
@@ -366,7 +366,7 @@ void App::controls(float w, float h) {
     }
     groupTitle("Reset", false);
     if (button("Reset setup", Btn::Danger)) { int slot = p.slot; p = fh6::CamParams(); p.slot = slot; changed(); }
-    helpTooltip("Puts every setting above back to the FH6 ChaseCam defaults. Saved camera files stay until you save again.");
+    helpTooltip("Puts every setting above back to their defaults. Saved camera files stay until you save again.");
     ImGui::Dummy(ImVec2(0, SP2 * S));
     ImGui::PopStyleVar();
     ImGui::EndChild();

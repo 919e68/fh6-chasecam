@@ -19,7 +19,7 @@ FH6 ChaseCam builds both files from Playground's originals. It edits the origina
 
 ## Editor
 
-`FH6ChaseCam.exe` is a small Windows app (C++, Dear ImGui, Direct3D 11) to tune the camera with a live preview. It uses the Countersteer UI kit (garage theme): graphite grounds, orange as the one accent, cut corners, Oxanium, Saira and JetBrains Mono.
+**Forza Horizon Camera Editor** (`FH6ChaseCam.exe`) is a small Windows app (C++, Dear ImGui, Direct3D 11) to tune the camera with a live preview. It uses the Countersteer UI kit (garage theme): graphite grounds, orange as the one accent, cut corners, Oxanium, Saira and JetBrains Mono.
 
 - Sliders for height, distance, aim height, field of view, rotation follow, look into the corner, horizon tilt and drift response. Right-click a slider to reset it, double-click to type a value.
 - **Live preview.** With FH6's Data Out on, the preview follows your real driving: speed, drift angle, tyre slip and G-forces. Without it, a demo drive runs. The preview approximates the game's camera; FH6 is the final check.

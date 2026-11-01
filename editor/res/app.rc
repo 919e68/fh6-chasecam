@@ -12,9 +12,9 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "CompanyName", "SPIRE"
-      VALUE "FileDescription", "FH6 ChaseCam editor"
+      VALUE "FileDescription", "Forza Horizon Camera Editor"
       VALUE "FileVersion", "0.1.0"
-      VALUE "ProductName", "FH6 ChaseCam"
+      VALUE "ProductName", "Forza Horizon Camera Editor"
       VALUE "ProductVersion", "0.1.0"
       VALUE "LegalCopyright", "SPIRE, drift.ph"
     END

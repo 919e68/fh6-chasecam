@@ -130,7 +130,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, wndProc, 0, 0, inst, LoadIconW(inst, L"APPICON"), LoadCursor(nullptr, IDC_ARROW),
                        nullptr, nullptr, L"FH6ChaseCam", nullptr };
     RegisterClassExW(&wc);
-    gHwnd = CreateWindowW(wc.lpszClassName, L"FH6 ChaseCam", WS_OVERLAPPEDWINDOW, 100, 100, (int)(winW * scale), (int)(winH * scale),
+    gHwnd = CreateWindowW(wc.lpszClassName, L"Forza Horizon Camera Editor", WS_OVERLAPPEDWINDOW, 100, 100, (int)(winW * scale), (int)(winH * scale),
                           nullptr, nullptr, wc.hInstance, nullptr);
     BOOL dark = TRUE; // dark title bar (Windows 10 2004+ / 11)
     DwmSetWindowAttribute(gHwnd, 20, &dark, sizeof dark);
@@ -139,7 +139,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     if (!createDevice(gHwnd)) {
         destroyDevice();
-        MessageBoxW(nullptr, L"Direct3D 11 isn't available on this PC.", L"FH6 ChaseCam", MB_ICONERROR);
+        MessageBoxW(nullptr, L"Direct3D 11 isn't available on this PC.", L"Forza Horizon Camera Editor", MB_ICONERROR);
         return 1;
     }
     ShowWindow(gHwnd, SW_SHOWDEFAULT);
