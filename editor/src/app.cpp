@@ -227,15 +227,15 @@ void App::frame(float W, float H) {
     ImGui::SetNextWindowSize(ImVec2(W, H));
     ImGui::Begin("##root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse);
-    float g = SP6 * S;
-    float topH = 56 * S, footH = 88 * S, leftW = 348 * S;
+    float g = SP4 * S;
+    float topH = 44 * S, footH = 60 * S, leftW = 300 * S;
     ImGui::SetCursorPos(ImVec2(0, 0));
     topBar(W);
     float bodyY = topH + g, bodyH = H - topH - footH - 2 * g;
     ImGui::SetCursorPos(ImVec2(g, bodyY));
     controls(leftW, bodyH);
     float rx0 = g + leftW + g, rw = W - rx0 - g;
-    float stripH = std::clamp(bodyH * 0.28f, 150 * S, 190 * S);
+    float stripH = std::clamp(bodyH * 0.27f, 120 * S, 160 * S);
     ImGui::SetCursorPos(ImVec2(rx0, bodyY));
     previewCard(rw, bodyH - stripH - g);
     ImGui::SetCursorPos(ImVec2(rx0, bodyY + bodyH - stripH));
@@ -255,14 +255,13 @@ static void drawMark(ImDrawList* dl, ImVec2 p, float sz, ImU32 col) {
 void App::topBar(float w) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
-    float h = 56 * S, g = SP6 * S, cy = p0.y + h / 2;
+    float h = 44 * S, g = SP4 * S, cy = p0.y + h / 2;
     dl->AddRectFilled(ImVec2(p0.x, p0.y + h - HAIR * S), ImVec2(p0.x + w, p0.y + h), rgb(LINE));
     // lockup: mark at 1.5x cap height, space-3, name
-    float mk = 20 * S;
+    float mk = 16 * S;
     drawMark(dl, ImVec2(p0.x + g, cy - mk / 2), mk, rgb(ORANGE));
     float nx = p0.x + g + mk + SP3 * S;
     drawText(dl, ImVec2(nx, cy - textHeight(Lockup) / 2 - 1 * S), Lockup, INK, "FH6 ChaseCam");
-    drawText(dl, ImVec2(nx + textWidth(Lockup, "FH6 ChaseCam") + SP4 * S, cy - textHeight(Label) / 2), Label, INK_MUTED, "by SPIRE");
 
     // camera slot, right
     static const char* slots[] = { "Chase Near", "Chase Far" };
@@ -280,7 +279,7 @@ void App::topBar(float w) {
     else std::snprintf(note, sizeof note, "Waiting for Data Out on port %d", port);
     Style ns = live || err ? Stat : Caption;
     float nw = textWidth(ns, note), tw = tagWidth(tg);
-    float right = p0.x + w - g - sw - SP8 * S;
+    float right = p0.x + w - g - sw - SP6 * S;
     drawText(dl, ImVec2(right - nw, cy - textHeight(ns) / 2 - 1 * S), ns, INK_MUTED, note);
     ImVec2 tp(right - nw - SP2 * S - tw, cy - 10 * S);
     tag(dl, tp, tone, tg);
@@ -294,14 +293,12 @@ void App::controls(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
     panel(dl, a, b, false);
-    float pad = SP6 * S;
-    drawText(dl, ImVec2(a.x + pad, a.y + pad), Label, INK_MUTED, fh6::SLOTS[p.slot ? 1 : 0].name);
-    drawText(dl, ImVec2(a.x + pad, a.y + pad + 14 * S + SP1 * S), Headline, INK, "Setup");
-    float top = pad + 14 * S + SP1 * S + 32 * S + SP4 * S;
+    float pad = SP4 * S;
+    float top = pad;
     ImGui::SetCursorScreenPos(ImVec2(a.x + 1 * S, a.y + top));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad - 1 * S, 0));
     ImGui::BeginChild("##controls", ImVec2(w - 2 * S, h - top - 2 * S), ImGuiChildFlags_AlwaysUseWindowPadding);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(SP3 * S, SP4 * S));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(SP2 * S, SP3 * S));
     bool c = false;
     groupTitle("Position", true);
     c |= slider("h", "Height", &p.heightOfs, -2, 2, 0.05, " m", 2, true, -0.7,
@@ -370,7 +367,7 @@ void App::controls(float w, float h) {
     groupTitle("Reset", false);
     if (button("Reset setup", Btn::Danger)) { int slot = p.slot; p = fh6::CamParams(); p.slot = slot; changed(); }
     helpTooltip("Puts every setting above back to the FH6 ChaseCam defaults. Saved camera files stay until you save again.");
-    ImGui::Dummy(ImVec2(0, SP6 * S));
+    ImGui::Dummy(ImVec2(0, SP2 * S));
     ImGui::PopStyleVar();
     ImGui::EndChild();
     ImGui::PopStyleVar();
@@ -379,7 +376,7 @@ void App::controls(float w, float h) {
 // Compact HUD card on black glass: columns of label over value, bottom-anchored.
 struct HudCol { const char* label; std::string value; const char* unit; unsigned color; };
 static void hudCard(ImDrawList* dl, ImVec2 anchor, bool alignRight, const std::vector<HudCol>& cols, Style valueStyle) {
-    float S = ui::S, padX = SP4 * S, padY = SP3 * S, gap = SP6 * S;
+    float S = ui::S, padX = SP3 * S, padY = SP2 * S, gap = SP4 * S;
     float vh = textHeight(valueStyle), w = 0;
     std::vector<float> cw;
     for (auto& c : cols) {
@@ -424,7 +421,7 @@ void App::previewCard(float w, float h) {
         dl->AddRectFilled(ImVec2(b.x - rw, b.y - t), b, rgb(ORANGE));
     }
 
-    float g = SP6 * S;
+    float g = SP4 * S;
     drawText(dl, ImVec2(fa.x + g, fa.y + g), Label, INK_MUTED, live ? "Preview of your drive" : "Preview, demo drive");
     drawText(dl, ImVec2(fa.x + g, fa.y + g + 14 * S + SP1 * S), Caption, INK_MUTED,
              "Approximate. FH6's own camera differs per car, so check in game.");
@@ -449,10 +446,10 @@ void App::previewCard(float w, float h) {
 void App::chartPanel(ImDrawList* dl, ImVec2 a, ImVec2 b, const char* title, const char* value, const std::vector<fh6::Pt>& curve,
                      double xMax, double xNow, double xScale, const char* x0Label, const char* x1Label) {
     panel(dl, a, b, false);
-    float pad = SP6 * S;
+    float pad = SP4 * S;
     drawText(dl, ImVec2(a.x + pad, a.y + pad - 4 * S), Label, INK_MUTED, title);
     drawText(dl, ImVec2(b.x - pad - textWidth(Stat, value), a.y + pad - 5 * S), Stat, INK, value);
-    ImVec2 ga(a.x + pad, a.y + pad + 22 * S), gb(b.x - pad, b.y - pad - 14 * S);
+    ImVec2 ga(a.x + pad, a.y + pad + 18 * S), gb(b.x - pad, b.y - pad - 12 * S);
     for (int i = 0; i <= 3; i++) {
         float yy = std::floor(ga.y + (gb.y - ga.y) * i / 3.f);
         dl->AddRectFilled(ImVec2(ga.x, yy), ImVec2(gb.x, yy + HAIR * S), rgb(LINE));
@@ -476,7 +473,7 @@ void App::chartPanel(ImDrawList* dl, ImVec2 a, ImVec2 b, const char* title, cons
 void App::inputsStrip(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 a = ImGui::GetCursorScreenPos();
-    float g = SP6 * S, gw = h + 20 * S;
+    float g = SP4 * S, gw = h + 10 * S;
     float cw = (w - gw - 2 * g) / 2;
     char v1[48], v2[48];
     double effect = fh6::curveAt(fh6::DRIFT_CURVE, std::fabs(in.slip));
@@ -492,13 +489,13 @@ void App::inputsStrip(float w, float h) {
     // G-force circle
     ImVec2 ga(a.x + 2 * cw + 2 * g, a.y), gb(ga.x + gw, a.y + h);
     panel(dl, ga, gb, false);
-    float pad = SP6 * S;
+    float pad = SP4 * S;
     drawText(dl, ImVec2(ga.x + pad, ga.y + pad - 4 * S), Label, INK_MUTED, "G-force");
     char gv[32];
     std::snprintf(gv, sizeof gv, "%.1f G", std::hypot(in.latG, in.lonG));
     drawText(dl, ImVec2(gb.x - pad - textWidth(Stat, gv), ga.y + pad - 5 * S), Stat, INK, gv);
-    ImVec2 c((ga.x + gb.x) / 2, (ga.y + pad + 22 * S + gb.y - pad) / 2);
-    float r = std::min((gb.x - ga.x) / 2 - pad, (gb.y - pad - (ga.y + pad + 22 * S)) / 2);
+    ImVec2 c((ga.x + gb.x) / 2, (ga.y + pad + 18 * S + gb.y - pad) / 2);
+    float r = std::min((gb.x - ga.x) / 2 - pad, (gb.y - pad - (ga.y + pad + 18 * S)) / 2);
     dl->AddCircle(c, r, rgb(LINE), 48, HAIR * S);
     dl->AddCircle(c, r * 0.5f, rgb(LINE), 48, HAIR * S);
     dl->AddRectFilled(ImVec2(c.x - r, c.y), ImVec2(c.x + r, c.y + HAIR * S), rgb(LINE));
@@ -515,17 +512,17 @@ void App::inputsStrip(float w, float h) {
 void App::footer(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
-    float g = SP6 * S, cy = p0.y + h / 2;
+    float g = SP4 * S, cy = p0.y + h / 2;
     dl->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + HAIR * S), rgb(LINE));
 
     // right: undo, then the primary
-    const char* slotName = fh6::SLOTS[p.slot ? 1 : 0].name;
-    std::string sub = std::string("Replaces ") + slotName;
-    float pw = 260 * S, uw = 150 * S;
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw, cy - 28 * S));
-    if (button("Save to game", Btn::Primary, true, pw, stockOk(), "CTRL+S", sub.c_str())) saveToGame();
-    helpTooltip("Writes the camera into mediapc\\camera in the game folder. Restart FH6 to load it.");
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw - SP4 * S - uw, cy - 20 * S));
+    float pw = buttonWidth("Save to game", Btn::Primary, false, "CTRL+S"), uw = buttonWidth("Undo save", Btn::Secondary);
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw, cy - 20 * S));
+    std::string tip = std::string("Writes the camera into mediapc\\camera in the game folder, replacing ") + fh6::SLOTS[p.slot ? 1 : 0].name +
+                      ". Restart FH6 to load it.";
+    if (button("Save to game", Btn::Primary, false, pw, stockOk(), "CTRL+S")) saveToGame();
+    helpTooltip(tip.c_str());
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw - SP3 * S - uw, cy - 20 * S));
     if (button("Undo save", Btn::Secondary, false, uw, hasBackup())) undoSave();
     helpTooltip("Puts back the camera files that were in the game before your first save.");
 
@@ -536,7 +533,7 @@ void App::footer(float w, float h) {
         if (!picked.empty()) { gameDir = picked; stockDir.clear(); findStock(); changed(); checkSaved(); }
     }
     helpTooltip("The Forza Horizon 6 folder: the one with forzahorizon6.exe (Steam), or its Content folder (Xbox app).");
-    ImGui::SameLine(0, SP4 * S);
+    ImGui::SameLine(0, SP3 * S);
     float tx = ImGui::GetCursorScreenPos().x;
     if (!stockNote.empty()) {
         ImGui::SetCursorScreenPos(ImVec2(tx, cy - 20 * S));
@@ -553,7 +550,7 @@ void App::footer(float w, float h) {
         ImGui::SameLine(0, SP4 * S);
         tx = ImGui::GetCursorScreenPos().x;
     }
-    float textMax = p0.x + w - g - pw - SP4 * S - uw - SP6 * S - tx;
+    float textMax = p0.x + w - g - pw - SP3 * S - uw - SP4 * S - tx;
     std::string folder = gameDir.empty() ? "No game folder chosen" : u8(gameDir);
     std::string title, line;
     unsigned tone = INK_MUTED;
@@ -561,10 +558,10 @@ void App::footer(float w, float h) {
     else if (!stockNote.empty()) { title = "Warning"; line = stockNote; tone = ORANGE; }
     else if (stockOk()) { title = dirty ? "Not saved" : "Saved"; line = dirty ? "The game doesn't have these settings yet." : "The game has these settings."; tone = dirty ? INK_MUTED : COOL; }
     dl->PushClipRect(ImVec2(tx, p0.y), ImVec2(tx + std::max(0.f, textMax), p0.y + h), true);
-    drawText(dl, ImVec2(tx, cy - 20 * S), Body, gameDir.empty() ? INK_MUTED : INK, folder.c_str());
+    drawText(dl, ImVec2(tx, cy - 18 * S), Body, gameDir.empty() ? INK_MUTED : INK, folder.c_str());
     if (!line.empty()) {
-        drawText(dl, ImVec2(tx, cy + 4 * S), Label, tone, title.c_str());
-        drawText(dl, ImVec2(tx + textWidth(Label, title.c_str()) + SP2 * S, cy + 2 * S), Caption, INK, line.c_str());
+        drawText(dl, ImVec2(tx, cy + 3 * S), Label, tone, title.c_str());
+        drawText(dl, ImVec2(tx + textWidth(Label, title.c_str()) + SP2 * S, cy + 1 * S), Caption, INK, line.c_str());
     }
     dl->PopClipRect();
 }

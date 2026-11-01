@@ -233,6 +233,15 @@ static void arrowIcon(ImDrawList* dl, ImVec2 p, float sz, ImU32 col) {
     dl->AddPolyline(c, 3, col, th, 0);
 }
 
+float buttonWidth(const char* label, Btn v, bool large, const char* hint, const char* sub) {
+    Style ls = large ? BtnTextLg : BtnText;
+    float padL = (large ? SP8 : (v == Btn::Ghost ? SP3 : SP6)) * S, padR = (v == Btn::Ghost ? SP3 : SP6) * S, gap = (large ? SP4 : SP3) * S;
+    float hintW = hint ? textWidth(Key, hint) + 10 * S : 0;
+    float lw = std::max(textWidth(ls, label), sub ? textWidth(Sub, sub) : 0.f);
+    float w = padL + (hint ? hintW + gap : 0) + lw + (v == Btn::Primary ? gap + (large ? 18 : 14) * S : 0) + padR;
+    return large ? std::max(w, 240 * S) : w;
+}
+
 bool button(const char* label, Btn v, bool large, float width, bool enabled, const char* hint, const char* sub) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     Style ls = large ? BtnTextLg : BtnText;
@@ -240,10 +249,7 @@ bool button(const char* label, Btn v, bool large, float width, bool enabled, con
           padR = (v == Btn::Ghost ? SP3 : SP6) * S, gap = (large ? SP4 : SP3) * S;
     bool arrow = v == Btn::Primary;
     float hintW = hint ? textWidth(Key, hint) + 10 * S : 0;
-    float lw = std::max(textWidth(ls, label), sub ? textWidth(Sub, sub) : 0.f);
-    float w = padL + (hint ? hintW + gap : 0) + lw + (arrow ? gap + (large ? 18 : 14) * S : 0) + padR;
-    if (large) w = std::max(w, 240 * S);
-    if (width > 0) w = width;
+    float w = width > 0 ? width : buttonWidth(label, v, large, hint, sub);
     ImVec2 a = ImGui::GetCursorScreenPos();
     ImGui::PushID(label);
     bool clicked = ImGui::InvisibleButton("##b", ImVec2(w, h)) && enabled;
@@ -315,8 +321,8 @@ bool slider(const char* id, const char* label, double* v, double mn, double mx, 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float w = ImGui::GetContentRegionAvail().x;
     ImVec2 p = ImGui::GetCursorScreenPos();
-    float labelH = 14 * S, inputTop = p.y + labelH + (SP2 + SP1) * S, inputH = 16 * S;
-    float rowH = labelH + (SP2 + SP1 + 16 + SP1) * S;
+    float labelH = 14 * S, inputTop = p.y + labelH + SP1 * S, inputH = 16 * S;
+    float rowH = labelH + (SP1 + 16) * S;
     bool changed = false;
     ImGui::InvisibleButton("##hit", ImVec2(w, rowH));
     bool hov = ImGui::IsItemHovered(), act = ImGui::IsItemActive();
@@ -457,7 +463,7 @@ void groupTitle(const char* t, bool first) {
     if (!first) {
         ImVec2 p = ImGui::GetCursorScreenPos();
         dl->AddRectFilled(p, ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y + HAIR * S), rgb(LINE));
-        ImGui::Dummy(ImVec2(0, SP4 * S));
+        ImGui::Dummy(ImVec2(0, SP2 * S));
     }
     text(Nav, INK, t);
 }

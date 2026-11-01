@@ -106,8 +106,8 @@ static LRESULT WINAPI wndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     case WM_GETMINMAXINFO: {
         float s = ImGui_ImplWin32_GetDpiScaleForHwnd(h);
         MINMAXINFO* m = (MINMAXINFO*)l;
-        m->ptMinTrackSize.x = (LONG)(980 * s);
-        m->ptMinTrackSize.y = (LONG)(660 * s);
+        m->ptMinTrackSize.x = (LONG)(900 * s);
+        m->ptMinTrackSize.y = (LONG)(580 * s);
         return 0;
     }
     case WM_SYSCOMMAND:
@@ -124,7 +124,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     ImGui_ImplWin32_EnableDpiAwareness();
     float scale = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
-    int winW = 1280, winH = 780; // optional: --size 1400x900
+    int winW = 1120, winH = 690; // optional: --size 1400x900
     if (const wchar_t* s = cmd ? wcsstr(cmd, L"--size ") : nullptr) swscanf(s + 7, L"%dx%d", &winW, &winH);
 
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, wndProc, 0, 0, inst, LoadIconW(inst, L"APPICON"), LoadCursor(nullptr, IDC_ARROW),

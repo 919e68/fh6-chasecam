@@ -50,6 +50,7 @@ void panel(ImDrawList* dl, ImVec2 a, ImVec2 b, bool brackets, int glassPct = 0);
 
 // Components
 enum class Btn { Primary, Secondary, Ghost, Danger };
+float buttonWidth(const char* label, Btn variant, bool large = false, const char* hint = nullptr, const char* sub = nullptr);
 bool button(const char* label, Btn variant, bool large = false, float width = 0, bool enabled = true,
             const char* hint = nullptr, const char* sublabel = nullptr);
 bool slider(const char* id, const char* label, double* v, double min, double max, double step,
