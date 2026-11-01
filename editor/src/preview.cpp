@@ -47,7 +47,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
 
     dl->PushClipRect(a, b, true);
     // sky to ground: dusk over the hills, asphalt below
-    dl->AddRectFilledMultiColor(a, b, rgb(0x232838), rgb(0x232838), rgb(ASPHALT), rgb(ASPHALT));
+    dl->AddRectFilled(a, b, rgb(BG100)); // flat grounds, no gradients
     // horizon (follows camera pitch and roll)
     {
         V3 h0 = v.pos + V3(v.fwd.x, 0, v.fwd.z).norm() * 1000.0 - v.right * 3000.0;
@@ -62,8 +62,8 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
             if (l > 0) { dn.x /= l; dn.y /= l; if (dn.y < 0) { dn.x = -dn.x; dn.y = -dn.y; } }
             float big = 4000;
             ImVec2 q[4] = { p0, p1, ImVec2(p1.x + dn.x * big, p1.y + dn.y * big), ImVec2(p0.x + dn.x * big, p0.y + dn.y * big) };
-            dl->AddConvexPolyFilled(q, 4, rgb(0x1A1C22));
-            dl->AddLine(p0, p1, rgb(0x3A3F4E), 1.f * S);
+            dl->AddConvexPolyFilled(q, 4, rgb(BG000));
+            dl->AddLine(p0, p1, rgb(LINE), 1.f * S);
         }
     }
 
@@ -80,7 +80,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
                 double d = std::hypot(mid.x - in.pos.x, mid.z - in.pos.z);
                 float fade = (float)std::clamp(1 - d / range, 0.0, 1.0);
                 if (fade <= 0) continue;
-                line3(dl, v, p0, p1, rgb(0x3A3F4E, (int)(150 * fade * fade)), 1.f * S);
+                line3(dl, v, p0, p1, rgb(LINE_STRONG, (int)(110 * fade * fade)), 1.f * S);
             }
         }
     }
@@ -93,7 +93,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
             float age = (float)(q->size() - i) / (float)q->size();
             V3 p0 = (*q)[i - 1].first, p1 = (*q)[i].first;
             p0.y = p1.y = gy;
-            line3(dl, v, p0, p1, IM_COL32(8, 9, 11, (int)(200 * s * (1 - age))), 5.f * S);
+            line3(dl, v, p0, p1, IM_COL32(0, 0, 0, (int)(220 * s * (1 - age))), 5.f * S);
         }
     }
 
@@ -111,8 +111,8 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
             if (alpha <= 0) continue;
             // soft puff: wide faint halo, denser core
             ImVec2 sc = v.project(c);
-            dl->AddCircleFilled(sc, r, rgb(0xC9CDD6, alpha / 2), 24);
-            dl->AddCircleFilled(sc, r * 0.62f, rgb(0xC9CDD6, alpha), 20);
+            dl->AddCircleFilled(sc, r, rgb(INK_MUTED, alpha / 2), 24);
+            dl->AddCircleFilled(sc, r * 0.62f, rgb(INK_MUTED, alpha), 20);
         }
     };
     drawSmoke(true);
@@ -147,13 +147,13 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
             if (fc.n.dot(v.pos - ctr) > 0) faces.push_back(fc); // facing the camera
         }
     };
-    box(0, 0, 0.22, 0.72, 0.93, 2.25, 0.06, 0.18, 0xE7E9EE);      // body
-    box(0, -0.2, 0.72, 1.20, 0.80, 1.10, 0.15, 0.48, 0x2B2F3A);   // cabin and glass, raked
+    box(0, 0, 0.22, 0.72, 0.93, 2.25, 0.06, 0.18, INK);            // body
+    box(0, -0.2, 0.72, 1.20, 0.80, 1.10, 0.15, 0.48, BG300);      // cabin and glass, raked
     // wheels first (tucked under the body, only their lower part shows), then the body
     std::vector<Face> body;
     body.swap(faces);
     for (int sx = -1; sx <= 1; sx += 2)
-        for (int sz = -1; sz <= 1; sz += 2) box(sx * 0.80, sz * 1.38, 0.0, 0.62, 0.12, 0.32, 0, 0, 0x101114);
+        for (int sz = -1; sz <= 1; sz += 2) box(sx * 0.80, sz * 1.38, 0.0, 0.62, 0.12, 0.32, 0, 0, BG000);
     auto byDepth = [](const Face& x, const Face& y) { return x.depth > y.depth; };
     std::sort(faces.begin(), faces.end(), byDepth);
     std::sort(body.begin(), body.end(), byDepth);
@@ -168,9 +168,9 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
         }
         if (!ok) continue;
         unsigned col = fc.color;
-        ImU32 fill = mix(0x0E0F12, col, fc.shade);
+        ImU32 fill = mix(BG000, col, fc.shade);
         dl->AddConvexPolyFilled(q, 4, fill);
-        dl->AddPolyline(q, 4, rgb(0x0E0F12, 160), 1.f * S, ImDrawFlags_Closed);
+        dl->AddPolyline(q, 4, rgb(BG000, 160), 1.f * S, ImDrawFlags_Closed);
     }
     // tail lights and a sakura stripe on the rear face
     {
@@ -183,19 +183,19 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
                 bool ok = true;
                 for (int i = 0; i < 4; i++) { V3 cc = v.toCam(c[i]); if (cc.z < v.nearZ) ok = false; else q[i] = v.project(cc); }
                 if (ok) {
-                    dl->AddConvexPolyFilled(q, 4, rgb(0xFF3B47));
+                    dl->AddConvexPolyFilled(q, 4, rgb(DANGER));
                     ImVec2 m((q[0].x + q[2].x) / 2, (q[0].y + q[2].y) / 2);
-                    dl->AddCircleFilled(m, 10 * S, rgb(0xFF3B47, 40), 20);
+                    dl->AddCircleFilled(m, 10 * S, rgb(DANGER, 40), 20);
                 }
             }
         }
     }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
-    unsigned dim = rgb(ASPHALT, 150);
+    ImU32 dim = glass(60);
     if (fa.x > a.x) { dl->AddRectFilled(a, ImVec2(fa.x, b.y), dim); dl->AddRectFilled(ImVec2(fb.x, a.y), b, dim); }
     if (fa.y > a.y) { dl->AddRectFilled(a, ImVec2(b.x, fa.y), dim); dl->AddRectFilled(ImVec2(a.x, fb.y), b, dim); }
-    dl->AddRect(ImVec2(std::max(fa.x, a.x), std::max(fa.y, a.y)), ImVec2(std::min(fb.x, b.x), std::min(fb.y, b.y)), rgb(LINE, 120), 0, 1.f * S);
+    dl->AddRect(ImVec2(std::max(fa.x, a.x), std::max(fa.y, a.y)), ImVec2(std::min(fb.x, b.x), std::min(fb.y, b.y)), GLASS_LINE, 0, 1.f * S);
     dl->PopClipRect();
 }
 

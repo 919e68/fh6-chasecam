@@ -19,12 +19,12 @@ FH6 ChaseCam builds both files from Playground's originals. It edits the origina
 
 ## Editor
 
-`FH6ChaseCam.exe` is a small Windows app (C++, Dear ImGui, Direct3D 11) to tune the camera with a live preview.
+`FH6ChaseCam.exe` is a small Windows app (C++, Dear ImGui, Direct3D 11) to tune the camera with a live preview. It uses the Countersteer UI kit (garage theme): graphite grounds, orange as the one accent, cut corners, Oxanium, Saira and JetBrains Mono.
 
 - Sliders for height, distance, aim height, field of view, rotation follow, look into the corner, horizon tilt and drift response. Right-click a slider to reset it, double-click to type a value.
 - **Live preview.** With FH6's Data Out on, the preview follows your real driving: speed, drift angle, tyre slip and G-forces. Without it, a demo drive runs. The preview approximates the game's camera; FH6 is the final check.
 - **What the camera reacts to.** Curves for the drift effects and speed widening, with a marker at your current slip and speed, plus a G-force circle.
-- **Save to game** writes `mediapc\camera` in the game folder. On first save it backs up any camera files already there; **Undo save** puts them back. Restart FH6 to load a new camera.
+- **Save to game** (Ctrl+S) writes `mediapc\camera` in the game folder. On first save it backs up any camera files already there; **Undo save** puts them back. Restart FH6 to load a new camera.
 
 Setup:
 
@@ -87,7 +87,7 @@ sh editor/build.sh test          # C++ core
 
 ## Credits
 
-[Dear ImGui](https://github.com/ocornut/imgui) (MIT). Saira font (SIL Open Font License, `editor/fonts/OFL-Saira.txt`).
+[Dear ImGui](https://github.com/ocornut/imgui) (MIT). Oxanium, Saira and JetBrains Mono fonts (SIL Open Font License, `editor/fonts/OFL-*.txt`); `editor/fonts/embed.sh` rebuilds the embedded copies.
 
 ## Note
 

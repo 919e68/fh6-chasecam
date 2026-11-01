@@ -82,9 +82,10 @@ void App::changed() {
     settingsSaveAt = fh6::nowSec() + 0.6;
 }
 
-void App::say(const std::string& s, unsigned color) {
+void App::say(const std::string& title, const std::string& s, unsigned tone) {
+    msgTitle = title;
     msg = s;
-    msgColor = color;
+    msgColor = tone;
     msgTime = fh6::nowSec();
 }
 
@@ -129,14 +130,14 @@ bool App::hasBackup() const {
 void App::saveToGame() {
     std::string ini, xml;
     if (!stockOk() || !readPath(stockDir / "CameraSettings.ini", ini) || !readPath(stockDir / "CameraPhysics.xml", xml)) {
-        say("Can't read the game's camera files. Choose the folder that has them.", RED);
+        say("Error", "Can't read the game's camera files. Choose the folder that has them.", DANGER);
         return;
     }
     fh6::Built b;
     try {
         b = fh6::build(ini, xml, p);
     } catch (const std::exception& e) {
-        say(std::string("These camera files don't look like FH6's: ") + e.what(), RED);
+        say("Error", std::string("These camera files don't look like FH6's: ") + e.what(), DANGER);
         return;
     }
     std::error_code ec;
@@ -151,11 +152,11 @@ void App::saveToGame() {
                                       "Undo save in the editor puts them back. Empty means there were none.\r\n");
     }
     if (!writePath(out / "CameraSettings.ini", b.ini) || !writePath(out / "CameraPhysics.xml", b.xml)) {
-        say("Couldn't write to " + u8(out) + ". Check the folder isn't read-only.", RED);
+        say("Error", "Couldn't write to " + u8(out) + ". Check the folder isn't read-only.", DANGER);
         return;
     }
     dirty = false;
-    say("Saved. Restart Forza Horizon 6 to load the new camera.", SAKURA);
+    say("Saved", "Restart Forza Horizon 6 to load the new camera.", COOL);
 }
 
 void App::undoSave() {
@@ -170,7 +171,7 @@ void App::undoSave() {
     fs::remove(bak / "README.txt", ec);
     fs::remove(bak, ec);
     dirty = true;
-    say("Camera files are back to how they were before your first save. Restart FH6 to load them.", SMOKE);
+    say("Undone", "Camera files are back to how they were before your first save. Restart FH6 to load them.", COOL);
 }
 
 void App::checkSaved() {
@@ -189,7 +190,7 @@ void App::init() {
     loadSettings();
     findStock();
     checkSaved();
-    if (!rx.start(port)) say(rx.error(), AMBER);
+    if (!rx.start(port)) say("Warning", rx.error(), ORANGE);
 }
 
 void App::shutdown() {
@@ -214,294 +215,356 @@ void App::update(float dt) {
 }
 
 // ---------------------------------------------------------------------------
+// Layout: NavBar-style top bar, setup panel on the left, preview panel (the
+// active one, with corner ticks) and three chart panels on the right, footer
+// with the primary action bottom-right. Spacing follows the kit: space-6
+// gutters, panel padding and gaps.
+// ---------------------------------------------------------------------------
 void App::frame(float W, float H) {
     update(std::min(ImGui::GetIO().DeltaTime, 0.1f));
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S) && stockOk()) saveToGame();
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(W, H));
     ImGui::Begin("##root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse);
-    float pad = 16 * S, gap = 12 * S;
-    float topH = 60 * S, footH = 64 * S, leftW = 330 * S;
-    ImGui::SetCursorPos(ImVec2(pad, 0));
-    topBar(W - 2 * pad);
-    float bodyH = H - topH - footH;
-    ImGui::SetCursorPos(ImVec2(pad, topH));
+    float g = SP6 * S;
+    float topH = 56 * S, footH = 88 * S, leftW = 348 * S;
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    topBar(W);
+    float bodyY = topH + g, bodyH = H - topH - footH - 2 * g;
+    ImGui::SetCursorPos(ImVec2(g, bodyY));
     controls(leftW, bodyH);
-    float rx0 = pad + leftW + gap, rw = W - rx0 - pad;
-    float stripH = std::clamp(bodyH * 0.3f, 150 * S, 190 * S);
-    ImGui::SetCursorPos(ImVec2(rx0, topH));
-    previewCard(rw, bodyH - stripH - gap);
-    ImGui::SetCursorPos(ImVec2(rx0, topH + bodyH - stripH));
+    float rx0 = g + leftW + g, rw = W - rx0 - g;
+    float stripH = std::clamp(bodyH * 0.28f, 150 * S, 190 * S);
+    ImGui::SetCursorPos(ImVec2(rx0, bodyY));
+    previewCard(rw, bodyH - stripH - g);
+    ImGui::SetCursorPos(ImVec2(rx0, bodyY + bodyH - stripH));
     inputsStrip(rw, stripH);
-    ImGui::SetCursorPos(ImVec2(pad, H - footH));
-    footer(W - 2 * pad);
+    ImGui::SetCursorPos(ImVec2(0, H - footH));
+    footer(W, footH);
     ImGui::End();
+}
+
+// FH6 ChaseCam mark: a viewfinder with the kit's cut corner, and the car in it
+static void drawMark(ImDrawList* dl, ImVec2 p, float sz, ImU32 col) {
+    float k = sz / 24.f;
+    cutLine(dl, p, ImVec2(p.x + 24 * k, p.y + 24 * k), 8 * k, col, 2.5f * k);
+    dl->AddRectFilled(ImVec2(p.x + 6 * k, p.y + 12 * k), ImVec2(p.x + 13 * k, p.y + 18 * k), col);
 }
 
 void App::topBar(float w) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
-    float h = 60 * S;
-    // wordmark: a small camera-swing glyph and the name
-    ImVec2 g(p0.x + 12 * S, p0.y + h / 2);
-    dl->PathArcTo(g, 11 * S, (float)(PI * 0.75), (float)(PI * 2.0), 24);
-    dl->PathStroke(rgb(SAKURA), 2.5f * S);
-    dl->AddCircleFilled(ImVec2(g.x + 11 * S, g.y), 3.5f * S, rgb(SAKURA));
-    dl->AddText(fonts.medium, 21 * S, ImVec2(p0.x + 34 * S, p0.y + h / 2 - 13 * S), rgb(SMOKE), "FH6 ChaseCam");
-    float nw = fonts.medium->CalcTextSizeA(21 * S, 1e9f, 0, "FH6 ChaseCam").x;
-    dl->AddText(fonts.regular, 14 * S, ImVec2(p0.x + 34 * S + nw + 10 * S, p0.y + h / 2 - 8 * S), rgb(DIM), "by SPIRE");
+    float h = 56 * S, g = SP6 * S, cy = p0.y + h / 2;
+    dl->AddRectFilled(ImVec2(p0.x, p0.y + h - HAIR * S), ImVec2(p0.x + w, p0.y + h), rgb(LINE));
+    // lockup: mark at 1.5x cap height, space-3, name
+    float mk = 20 * S;
+    drawMark(dl, ImVec2(p0.x + g, cy - mk / 2), mk, rgb(ORANGE));
+    float nx = p0.x + g + mk + SP3 * S;
+    drawText(dl, ImVec2(nx, cy - textHeight(Lockup) / 2 - 1 * S), Lockup, INK, "FH6 ChaseCam");
+    drawText(dl, ImVec2(nx + textWidth(Lockup, "FH6 ChaseCam") + SP4 * S, cy - textHeight(Label) / 2), Label, INK_MUTED, "by SPIRE");
 
-    // camera slot
-    float segW = 230 * S;
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - segW, p0.y + (h - 32 * S) / 2));
+    // camera slot, right
     static const char* slots[] = { "Chase Near", "Chase Far" };
-    ImGui::BeginGroup();
-    if (segmented("slot", &p.slot, slots, 2, segW)) { cam.reset(); changed(); }
-    ImGui::EndGroup();
-    helpTooltip("Which in-game camera this replaces. The other one stays stock, so you can switch back with the camera button.");
+    float sw = segmentTabsWidth(slots, 2), sh = (SP2 + 13 + SP3) * S;
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - sw, p0.y + h - sh));
+    if (segmentTabs("slot", &p.slot, slots, 2)) { cam.reset(); changed(); }
 
-    // status: live or demo
-    char st[96];
+    // Data Out status: a tag and a short note
     bool err = !rx.error().empty();
-    if (live) std::snprintf(st, sizeof st, "Live from FH6, %.0f Hz", rx.rate());
-    else if (err) std::snprintf(st, sizeof st, "Data Out port %d unavailable", port);
-    else std::snprintf(st, sizeof st, "Demo drive, waiting for Data Out on port %d", port);
-    float sw = fonts.regular->CalcTextSizeA(14 * S, 1e9f, 0, st).x;
-    float sx = p0.x + w - segW - 24 * S - sw;
-    unsigned dot = live ? SAKURA : err ? AMBER : DIM;
-    dl->AddCircleFilled(ImVec2(sx - 12 * S, p0.y + h / 2), 4 * S, rgb(dot));
-    dl->AddText(fonts.regular, 14 * S, ImVec2(sx, p0.y + h / 2 - 9 * S), rgb(live ? SMOKE : MUTED), st);
-    ImGui::SetCursorScreenPos(ImVec2(sx - 20 * S, p0.y + h / 2 - 10 * S));
-    ImGui::InvisibleButton("##status", ImVec2(sw + 20 * S, 20 * S));
-    helpTooltip("In FH6: Settings > HUD and Gameplay > Data Out: On, IP 127.0.0.1, and this port. "
+    const char* tg = live ? "Live" : err ? "Port in use" : "Demo";
+    Tone tone = live ? Tone::Cool : err ? Tone::Danger : Tone::Neutral;
+    char note[96];
+    if (live) std::snprintf(note, sizeof note, "%.0f Hz", rx.rate());
+    else if (err) std::snprintf(note, sizeof note, "port %d", port);
+    else std::snprintf(note, sizeof note, "Waiting for Data Out on port %d", port);
+    Style ns = live || err ? Stat : Caption;
+    float nw = textWidth(ns, note), tw = tagWidth(tg);
+    float right = p0.x + w - g - sw - SP8 * S;
+    drawText(dl, ImVec2(right - nw, cy - textHeight(ns) / 2 - 1 * S), ns, INK_MUTED, note);
+    ImVec2 tp(right - nw - SP2 * S - tw, cy - 10 * S);
+    tag(dl, tp, tone, tg);
+    ImGui::SetCursorScreenPos(tp);
+    ImGui::InvisibleButton("##status", ImVec2(tw + SP2 * S + nw, 20 * S));
+    helpTooltip("In FH6: Settings > HUD and Gameplay > Data Out On, IP 127.0.0.1, and the port in Data Out on the left. "
                 "Without it the preview runs a demo drive.");
 }
 
 void App::controls(float w, float h) {
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * S, 14 * S));
-    ImGui::BeginChild("##controls", ImVec2(w, h), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
+    panel(dl, a, b, false);
+    float pad = SP6 * S;
+    drawText(dl, ImVec2(a.x + pad, a.y + pad), Label, INK_MUTED, fh6::SLOTS[p.slot ? 1 : 0].name);
+    drawText(dl, ImVec2(a.x + pad, a.y + pad + 14 * S + SP1 * S), Headline, INK, "Setup");
+    float top = pad + 14 * S + SP1 * S + 32 * S + SP4 * S;
+    ImGui::SetCursorScreenPos(ImVec2(a.x + 1 * S, a.y + top));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad - 1 * S, 0));
+    ImGui::BeginChild("##controls", ImVec2(w - 2 * S, h - top - 2 * S), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(SP3 * S, SP4 * S));
     bool c = false;
-    sectionTitle("Position");
-    c |= slider("h", "Height", &p.heightOfs, -2, 2, 0.05, "%+.2f m", -0.7,
+    groupTitle("Position", true);
+    c |= slider("h", "Height", &p.heightOfs, -2, 2, 0.05, " m", 2, true, -0.7,
                 "Camera height compared to the stock camera. Lower: closer to the road, more dramatic.");
-    c |= slider("d", "Distance", &p.radiusOfs, -3, 3, 0.05, "%+.2f m", -0.5,
+    c |= slider("d", "Distance", &p.radiusOfs, -3, 3, 0.05, " m", 2, true, -0.5,
                 "Distance behind the car compared to stock. Negative: closer.");
-    c |= slider("t", "Aim height", &p.targetOfs, -2, 2, 0.05, "%+.2f m", -0.55,
-                "Height of the point the camera looks at. Lower than the camera change: flatter view, more horizon.");
-    sectionTitle("View");
-    c |= slider("fov", "Field of view", &p.fovAdd, -15, 25, 1, "%+.0f\xC2\xB0", 6,
+    c |= slider("t", "Aim height", &p.targetOfs, -2, 2, 0.05, " m", 2, true, -0.55,
+                "Height of the point the camera looks at. Lower it less than the camera for a flatter view with more horizon.");
+    groupTitle("View", false);
+    c |= slider("fov", "Field of view", &p.fovAdd, -15, 25, 1, "\xC2\xB0", 0, true, 6,
                 "Added to the camera's stock field of view. Higher: wider, feels faster.");
-    c |= slider("mfov", "Field of view limit", &p.maxFovAdd, 0, 40, 1, "%+.0f\xC2\xB0", 10,
-                "Raises the highest field of view the camera may reach. Raise it with the two settings above.");
-    c |= slider("sfov", "Widen with speed", &p.speedFov, 0, 20, 1, "%.0f\xC2\xB0", 6,
+    c |= slider("mfov", "Field of view limit", &p.maxFovAdd, 0, 40, 1, "\xC2\xB0", 0, true, 10,
+                "Raises the highest field of view the camera may reach. Raise it with the setting above.");
+    c |= slider("sfov", "Widen with speed", &p.speedFov, 0, 20, 1, "\xC2\xB0", 0, false, 6,
                 "Extra field of view from about 65 to 320 km/h.");
-    sectionTitle("Follow");
-    c |= slider("fol", "Rotation follow", &p.follow, 0.3, 1.5, 0.05, "\xC3\x97%.2f", 0.8,
-                "How tightly the camera turns with the car. Lower: looser, shows more of the car's side in a drift.");
-    sectionTitle("Drift");
-    c |= slider("aim", "Look into the corner", &p.cornerAim, 0, 20, 0.5, "%.1f\xC2\xB0", 6,
-                "While drifting, turns the view toward the inside of the corner. The car sits toward the outside of the frame.");
-    c |= slider("tilt", "Horizon tilt", &p.driftTilt, -10, 10, 0.5, "%+.1f\xC2\xB0", 3,
-                "While drifting, tips the horizon. Positive: toward the outside of the corner. 0: level.");
-    c |= slider("sm", "Drift response", &p.driftSmooth, 2, 40, 1, "%.0f", 10,
+    groupTitle("Follow", false);
+    double fp = p.follow * 100;
+    if (slider("fol", "Rotation follow", &fp, 30, 150, 5, " %", 0, false, 80,
+               "How tightly the camera turns with the car, compared to stock. Lower: looser, shows more of the car's side in a drift.")) {
+        p.follow = fp / 100;
+        c = true;
+    }
+    groupTitle("Drift", false);
+    c |= slider("aim", "Look into the corner", &p.cornerAim, 0, 20, 0.5, "\xC2\xB0", 1, false, 6,
+                "While you drift, turns the view toward the inside of the corner, so the car sits toward the outside of the frame.");
+    c |= slider("tilt", "Horizon tilt", &p.driftTilt, -10, 10, 0.5, "\xC2\xB0", 1, true, 3,
+                "While you drift, tips the horizon. Positive: toward the outside of the corner. 0: level.");
+    c |= slider("sm", "Drift response", &p.driftSmooth, 2, 40, 1, "", 0, false, 10,
                 "How fast the drift effects come in and go. Higher: snappier. Lower: smoother.");
     if (c) changed();
 
-    sectionTitle("Preview");
+    groupTitle("Preview", false);
     toggle("ft", "Game's Drift camera is on", &followTravel,
            "Match FH6's own Drift camera setting (HUD and Gameplay). It makes the camera follow your direction of travel.");
-    sectionTitle("If the game turns the wrong way");
+    groupTitle("Direction fix", false);
     bool f = false;
     f |= toggle("fa", "Flip look into the corner", &p.flipAim,
                 "Use if the game turns the view to the outside of the corner. The preview always shows the intended direction.");
-    f |= toggle("ftl", "Flip horizon tilt", &p.flipTilt, "Use if the game tilts the horizon the other way than the preview.");
+    f |= toggle("ftl", "Flip horizon tilt", &p.flipTilt, "Use if the game tips the horizon the other way than the preview.");
     if (f) changed();
 
-    sectionTitle("Data Out");
-    ImGui::PushFont(fonts.regular, 14);
-    ImGui::PushStyleColor(ImGuiCol_Text, rgb(MUTED));
-    ImGui::TextWrapped("In FH6: Settings > HUD and Gameplay > Data Out On, IP 127.0.0.1, port:");
-    ImGui::PopStyleColor();
-    ImGui::PopFont();
+    groupTitle("Data Out", false);
+    textWrapped(Body, INK_MUTED, "In FH6: Settings > HUD and Gameplay > Data Out On, IP 127.0.0.1, and this port.", ImGui::GetContentRegionAvail().x);
     static int portEdit = 0;
     if (portEdit == 0) portEdit = port;
+    TypeStyle st = typeStyle(Stat);
+    ImGui::PushFont(st.font, st.size);
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(LINE_STRONG));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(SP3 * S, (40 * S - 13 * S) / 2));
     ImGui::SetNextItemWidth(110 * S);
     ImGui::InputInt("##port", &portEdit, 0, 0);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
     portEdit = std::clamp(portEdit, 1024, 65535);
-    ImGui::SameLine();
-    if (button("Listen", false, 0, portEdit != port || !rx.error().empty())) {
-        if (portEdit >= 5200 && portEdit <= 5300) say("Ports 5200 to 5300 are used by FH6 itself. Pick another.", AMBER);
+    ImGui::SameLine(0, SP3 * S);
+    if (button("Listen", Btn::Secondary, false, 0, portEdit != port || !rx.error().empty())) {
+        if (portEdit >= 5200 && portEdit <= 5300) say("Warning", "Ports 5200 to 5300 are used by FH6 itself. Pick another.", ORANGE);
         else {
             port = portEdit;
-            if (rx.start(port)) say("Listening for Data Out on port " + std::to_string(port) + ".", SMOKE);
-            else say(rx.error(), AMBER);
+            if (rx.start(port)) say("Info", "Listening for Data Out on port " + std::to_string(port) + ".", COOL);
+            else say("Warning", rx.error(), ORANGE);
             changed();
         }
     }
-    ImGui::Dummy(ImVec2(0, 8 * S));
-    if (button("Reset to defaults", false)) { int slot = p.slot; p = fh6::CamParams(); p.slot = slot; changed(); }
-    ImGui::Dummy(ImVec2(0, 6 * S));
+    groupTitle("Reset", false);
+    if (button("Reset setup", Btn::Danger)) { int slot = p.slot; p = fh6::CamParams(); p.slot = slot; changed(); }
+    helpTooltip("Puts every setting above back to the FH6 ChaseCam defaults. Saved camera files stay until you save again.");
+    ImGui::Dummy(ImVec2(0, SP6 * S));
+    ImGui::PopStyleVar();
     ImGui::EndChild();
     ImGui::PopStyleVar();
+}
+
+// Compact HUD card on black glass: columns of label over value, bottom-anchored.
+struct HudCol { const char* label; std::string value; const char* unit; unsigned color; };
+static void hudCard(ImDrawList* dl, ImVec2 anchor, bool alignRight, const std::vector<HudCol>& cols, Style valueStyle) {
+    float S = ui::S, padX = SP4 * S, padY = SP3 * S, gap = SP6 * S;
+    float vh = textHeight(valueStyle), w = 0;
+    std::vector<float> cw;
+    for (auto& c : cols) {
+        float vw = textWidth(valueStyle, c.value.c_str()) + (c.unit ? SP1 * S + textWidth(Stat, c.unit) : 0);
+        cw.push_back(std::max(textWidth(Label, c.label), vw));
+        w += cw.back();
+    }
+    w += 2 * padX + gap * (cols.size() - 1);
+    float h = padY + 14 * S + SP1 * S + vh + padY;
+    ImVec2 a(alignRight ? anchor.x - w : anchor.x, anchor.y - h), b(a.x + w, anchor.y);
+    panel(dl, a, b, false, 80);
+    float x = a.x + padX;
+    for (size_t i = 0; i < cols.size(); i++) {
+        drawText(dl, ImVec2(x, a.y + padY), Label, ON_GLASS_MUTED, cols[i].label);
+        float vy = a.y + padY + 14 * S + SP1 * S;
+        drawText(dl, ImVec2(x, vy), valueStyle, cols[i].color, cols[i].value.c_str());
+        if (cols[i].unit)
+            drawText(dl, ImVec2(x + textWidth(valueStyle, cols[i].value.c_str()) + SP1 * S, vy + vh - 15 * S), Stat, ON_GLASS_MUTED, cols[i].unit);
+        x += cw[i] + gap;
+    }
 }
 
 void App::previewCard(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
     ImGui::InvisibleButton("##preview", ImVec2(w, h));
-    dl->AddRectFilled(a, b, rgb(TARMAC), 10 * S);
-    ImVec2 ia(a.x + 1, a.y + 1), ib(b.x - 1, b.y - 1);
-    dl->PushClipRect(ia, ib, true);
-    // the game's 16:9 frame, as large as fits; the rest of the card is dimmed
+    // the game's 16:9 frame, as large as fits; the rest of the panel is dimmed
+    ImVec2 ia(a.x + 1 * S, a.y + 1 * S), ib(b.x - 1 * S, b.y - 1 * S);
     float vw = ib.x - ia.x, vh = ib.y - ia.y;
     float fw = std::min(vw, vh * 16.f / 9.f), fh = fw * 9.f / 16.f;
     ImVec2 fa(ia.x + (vw - fw) / 2, ia.y + (vh - fh) / 2), fb(fa.x + fw, fa.y + fh);
     drawPreview(dl, ia, ib, fa, fb, pose, in, scene);
-    dl->PopClipRect();
-    // rounded mask corners
-    dl->AddRect(a, b, rgb(ASPHALT), 10 * S, 3 * S);
-    dl->AddRect(a, b, rgb(LINE), 10 * S, 1 * S);
+    // the panel's cut corner and hairline over the scene, then the active-panel ticks
+    float cut = CH_LG * S;
+    dl->AddTriangleFilled(ImVec2(b.x - cut, a.y), ImVec2(b.x + 1, a.y - 1), ImVec2(b.x + 1, a.y + cut), rgb(BG100));
+    cutLine(dl, a, b, cut, rgb(LINE), HAIR * S);
+    {
+        float t = SP3 * S, rw = RULE * S;
+        dl->AddRectFilled(a, ImVec2(a.x + t, a.y + rw), rgb(ORANGE));
+        dl->AddRectFilled(a, ImVec2(a.x + rw, a.y + t), rgb(ORANGE));
+        dl->AddRectFilled(ImVec2(b.x - t, b.y - rw), b, rgb(ORANGE));
+        dl->AddRectFilled(ImVec2(b.x - rw, b.y - t), b, rgb(ORANGE));
+    }
 
-    // readouts
-    char buf[64];
-    float x = fa.x + 18 * S, y = fb.y - 58 * S;
-    std::snprintf(buf, sizeof buf, "%.0f", in.speed * 3.6);
-    drawNum(dl, ImVec2(x, y), buf, 30, SMOKE, true);
-    float sw = numWidth(buf, 30, true);
-    dl->AddText(fonts.regular, 14 * S, ImVec2(x + sw + 6 * S, y + 14 * S), rgb(MUTED), "km/h");
-    std::snprintf(buf, sizeof buf, "%.0f\xC2\xB0", std::fabs(in.drift) * 180 / PI);
-    float dx = x + sw + 60 * S;
-    drawNum(dl, ImVec2(dx, y), buf, 30, std::fabs(in.slip) > 1 ? SAKURA : SMOKE, true);
-    dl->AddText(fonts.regular, 14 * S, ImVec2(dx + numWidth(buf, 30, true) + 6 * S, y + 14 * S), rgb(MUTED), "drift angle");
+    float g = SP6 * S;
+    drawText(dl, ImVec2(fa.x + g, fa.y + g), Label, INK_MUTED, live ? "Preview of your drive" : "Preview, demo drive");
+    drawText(dl, ImVec2(fa.x + g, fa.y + g + 14 * S + SP1 * S), Caption, INK_MUTED,
+             "Approximate. FH6's own camera differs per car, so check in game.");
 
-    std::snprintf(buf, sizeof buf, "FOV %.0f\xC2\xB0   aim %+.1f\xC2\xB0   tilt %+.1f\xC2\xB0", pose.fov, pose.aimDeg, pose.tiltDeg);
-    float bw = numWidth(buf, 14);
-    drawNum(dl, ImVec2(fb.x - bw - 18 * S, fb.y - 34 * S), buf, 14, MUTED);
-    const char* note = live ? "Preview of your drive" : "Preview, demo drive";
-    dl->AddText(fonts.medium, 15 * S, ImVec2(fa.x + 18 * S, fa.y + 14 * S), rgb(SMOKE), note);
-    dl->AddText(fonts.regular, 13 * S, ImVec2(fa.x + 18 * S, fa.y + 34 * S), rgb(MUTED),
-                "Approximate. FH6's own camera differs per car, so check in game.");
+    // HUD: speed and drift angle bottom left, the camera's live values bottom right
+    char spd[32], ang[32], fov[32], aim[32], tlt[32];
+    double effect = fh6::curveAt(fh6::DRIFT_CURVE, std::fabs(in.slip));
+    std::snprintf(spd, sizeof spd, "%.0f", in.speed * 3.6);
+    std::snprintf(ang, sizeof ang, "%.0f\xC2\xB0", std::fabs(in.drift) * 180 / PI);
+    std::snprintf(fov, sizeof fov, "%.0f\xC2\xB0", pose.fov);
+    fmtNum(aim, sizeof aim, pose.aimDeg, 1, true);
+    fmtNum(tlt, sizeof tlt, pose.tiltDeg, 1, true);
+    hudCard(dl, ImVec2(fa.x + g, fb.y - g), false,
+            { { "Speed", spd, "km/h", ON_GLASS }, { "Drift angle", ang, nullptr, effect > 0.05 ? ORANGE_HOT : ON_GLASS } }, Readout);
+    hudCard(dl, ImVec2(fb.x - g, fb.y - g), true,
+            { { "Field of view", fov, nullptr, ON_GLASS }, { "Corner aim", std::string(aim) + "\xC2\xB0", nullptr, ON_GLASS },
+              { "Horizon tilt", std::string(tlt) + "\xC2\xB0", nullptr, ON_GLASS } }, Stat);
 }
 
-// One small chart card: curve, live marker, caption.
-static void chartCard(ImDrawList* dl, ImVec2 a, ImVec2 b, const char* title, const char* caption,
-                      const std::vector<fh6::Pt>& curve, double xMax, double xNow, double xScale, const char* xLabel) {
-    float S = ui::S;
-    dl->AddRectFilled(a, b, rgb(TARMAC), 10 * S);
-    dl->AddText(fonts.medium, 15 * S, ImVec2(a.x + 14 * S, a.y + 10 * S), rgb(SMOKE), title);
-    float cw = fonts.regular->CalcTextSizeA(13 * S, 1e9f, 0, caption).x;
-    dl->AddText(fonts.regular, 13 * S, ImVec2(b.x - 14 * S - cw, a.y + 12 * S), rgb(MUTED), caption);
-    ImVec2 ga(a.x + 14 * S, a.y + 38 * S), gb(b.x - 14 * S, b.y - 26 * S);
-    for (int i = 0; i <= 4; i++) {
-        float yy = ga.y + (gb.y - ga.y) * i / 4.f;
-        dl->AddLine(ImVec2(ga.x, yy), ImVec2(gb.x, yy), rgb(KERB), 1);
+// Chart panel: label and value, a hairline grid, the response curve in orange,
+// and a marker at the current input.
+void App::chartPanel(ImDrawList* dl, ImVec2 a, ImVec2 b, const char* title, const char* value, const std::vector<fh6::Pt>& curve,
+                     double xMax, double xNow, double xScale, const char* x0Label, const char* x1Label) {
+    panel(dl, a, b, false);
+    float pad = SP6 * S;
+    drawText(dl, ImVec2(a.x + pad, a.y + pad - 4 * S), Label, INK_MUTED, title);
+    drawText(dl, ImVec2(b.x - pad - textWidth(Stat, value), a.y + pad - 5 * S), Stat, INK, value);
+    ImVec2 ga(a.x + pad, a.y + pad + 22 * S), gb(b.x - pad, b.y - pad - 14 * S);
+    for (int i = 0; i <= 3; i++) {
+        float yy = std::floor(ga.y + (gb.y - ga.y) * i / 3.f);
+        dl->AddRectFilled(ImVec2(ga.x, yy), ImVec2(gb.x, yy + HAIR * S), rgb(LINE));
     }
     auto X = [&](double x) { return ga.x + (gb.x - ga.x) * (float)(x / xMax); };
     auto Y = [&](double y) { return gb.y - (gb.y - ga.y) * (float)y; };
-    // filled area and line
     std::vector<ImVec2> pts;
-    int n = 64;
-    for (int i = 0; i <= n; i++) {
-        double x = xMax * i / n;
+    for (int i = 0; i <= 64; i++) {
+        double x = xMax * i / 64;
         pts.push_back(ImVec2(X(x), Y(fh6::curveAt(curve, x / xScale))));
     }
-    for (int i = 0; i < n; i++) {
-        ImVec2 q[4] = { pts[i], pts[i + 1], ImVec2(pts[i + 1].x, gb.y), ImVec2(pts[i].x, gb.y) };
-        dl->AddConvexPolyFilled(q, 4, rgb(SAKURA, 28));
-    }
-    dl->AddPolyline(pts.data(), (int)pts.size(), rgb(SAKURA), 2 * S);
+    dl->AddPolyline(pts.data(), (int)pts.size(), rgb(ORANGE), RULE * S);
     double xn = std::clamp(xNow, 0.0, xMax);
-    float mx = X(xn), my = Y(fh6::curveAt(curve, xn / xScale));
-    dl->AddLine(ImVec2(mx, ga.y), ImVec2(mx, gb.y), rgb(SMOKE, 70), 1 * S);
-    dl->AddCircleFilled(ImVec2(mx, my), 5 * S, rgb(SMOKE));
-    dl->AddText(fonts.regular, 12 * S, ImVec2(ga.x, gb.y + 6 * S), rgb(DIM), "0");
-    float lw = fonts.regular->CalcTextSizeA(12 * S, 1e9f, 0, xLabel).x;
-    dl->AddText(fonts.regular, 12 * S, ImVec2(gb.x - lw, gb.y + 6 * S), rgb(DIM), xLabel);
+    float mx = std::floor(X(xn)), my = Y(fh6::curveAt(curve, xn / xScale));
+    dl->AddRectFilled(ImVec2(mx, ga.y), ImVec2(mx + HAIR * S, gb.y), rgb(LINE_STRONG));
+    dl->AddRectFilled(ImVec2(mx - 3 * S, my - 3 * S), ImVec2(mx + 3 * S, my + 3 * S), rgb(INK));
+    drawText(dl, ImVec2(ga.x, gb.y + SP1 * S), Caption, INK_MUTED, x0Label);
+    drawText(dl, ImVec2(gb.x - textWidth(Caption, x1Label), gb.y + SP1 * S), Caption, INK_MUTED, x1Label);
 }
 
 void App::inputsStrip(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 a = ImGui::GetCursorScreenPos();
-    float gap = 12 * S, gw = h; // G circle card is square
-    float cw = (w - gw - 2 * gap) / 2;
-    char cap[96];
-    double drift = fh6::curveAt(fh6::DRIFT_CURVE, std::fabs(in.slip));
-    std::snprintf(cap, sizeof cap, "slip %.1f, effect %.0f%%", std::fabs(in.slip), drift * 100);
-    chartCard(dl, a, ImVec2(a.x + cw, a.y + h), "Drift effects", cap, fh6::DRIFT_CURVE, 8, std::fabs(in.slip), 1, "tyre slip 8");
+    float g = SP6 * S, gw = h + 20 * S;
+    float cw = (w - gw - 2 * g) / 2;
+    char v1[48], v2[48];
+    double effect = fh6::curveAt(fh6::DRIFT_CURVE, std::fabs(in.slip));
+    std::snprintf(v1, sizeof v1, "%.0f %%", effect * 100);
+    chartPanel(dl, a, ImVec2(a.x + cw, a.y + h), "Drift effects", v1, fh6::DRIFT_CURVE, 8, std::fabs(in.slip), 1, "grip", "tyre slip 8");
     double kmh = in.speed * 3.6;
-    std::snprintf(cap, sizeof cap, "+%.1f\xC2\xB0 at %.0f km/h", p.speedFov * fh6::curveAt(fh6::SPEED_CURVE, kmh / 1.609344), kmh);
-    chartCard(dl, ImVec2(a.x + cw + gap, a.y), ImVec2(a.x + 2 * cw + gap, a.y + h), "Widen with speed", cap, fh6::SPEED_CURVE,
-              320, kmh, 1.609344, "320 km/h");
+    char sv[32];
+    fmtNum(sv, sizeof sv, p.speedFov * fh6::curveAt(fh6::SPEED_CURVE, kmh / 1.609344), 1, true);
+    std::snprintf(v2, sizeof v2, "%s\xC2\xB0", sv);
+    chartPanel(dl, ImVec2(a.x + cw + g, a.y), ImVec2(a.x + 2 * cw + g, a.y + h), "Widen with speed", v2, fh6::SPEED_CURVE, 320, kmh,
+               1.609344, "0 km/h", "320 km/h");
 
-    // G-G circle
-    ImVec2 ga(a.x + 2 * cw + 2 * gap, a.y), gb(ga.x + gw, a.y + h);
-    dl->AddRectFilled(ga, gb, rgb(TARMAC), 10 * S);
-    dl->AddText(fonts.medium, 15 * S, ImVec2(ga.x + 14 * S, ga.y + 10 * S), rgb(SMOKE), "G-forces");
-    ImVec2 c((ga.x + gb.x) / 2, (ga.y + gb.y) / 2 + 12 * S);
-    float r = (gb.y - ga.y) / 2 - 30 * S;
-    dl->AddCircle(c, r, rgb(KERB), 48, 1.5f * S);
-    dl->AddCircle(c, r * 0.5f, rgb(KERB), 48, 1 * S);
-    dl->AddLine(ImVec2(c.x - r, c.y), ImVec2(c.x + r, c.y), rgb(KERB), 1);
-    dl->AddLine(ImVec2(c.x, c.y - r), ImVec2(c.x, c.y + r), rgb(KERB), 1);
+    // G-force circle
+    ImVec2 ga(a.x + 2 * cw + 2 * g, a.y), gb(ga.x + gw, a.y + h);
+    panel(dl, ga, gb, false);
+    float pad = SP6 * S;
+    drawText(dl, ImVec2(ga.x + pad, ga.y + pad - 4 * S), Label, INK_MUTED, "G-force");
+    char gv[32];
+    std::snprintf(gv, sizeof gv, "%.1f G", std::hypot(in.latG, in.lonG));
+    drawText(dl, ImVec2(gb.x - pad - textWidth(Stat, gv), ga.y + pad - 5 * S), Stat, INK, gv);
+    ImVec2 c((ga.x + gb.x) / 2, (ga.y + pad + 22 * S + gb.y - pad) / 2);
+    float r = std::min((gb.x - ga.x) / 2 - pad, (gb.y - pad - (ga.y + pad + 22 * S)) / 2);
+    dl->AddCircle(c, r, rgb(LINE), 48, HAIR * S);
+    dl->AddCircle(c, r * 0.5f, rgb(LINE), 48, HAIR * S);
+    dl->AddRectFilled(ImVec2(c.x - r, c.y), ImVec2(c.x + r, c.y + HAIR * S), rgb(LINE));
+    dl->AddRectFilled(ImVec2(c.x, c.y - r), ImVec2(c.x + HAIR * S, c.y + r), rgb(LINE));
     auto G = [&](float lat, float lon) { return ImVec2(c.x + std::clamp(lat / 1.5f, -1.f, 1.f) * r, c.y - std::clamp(lon / 1.5f, -1.f, 1.f) * r); };
     for (size_t i = 1; i < gTrail.size(); i++)
         dl->AddLine(G(gTrail[i - 1].first, gTrail[i - 1].second), G(gTrail[i].first, gTrail[i].second),
-                    rgb(SAKURA, (int)(140 * i / gTrail.size())), 2 * S);
-    dl->AddCircleFilled(G((float)in.latG, (float)in.lonG), 5 * S, rgb(SMOKE));
-    char gb2[32];
-    std::snprintf(gb2, sizeof gb2, "%.1f G", std::hypot(in.latG, in.lonG));
-    float tw = numWidth(gb2, 13);
-    drawNum(dl, ImVec2(gb.x - 14 * S - tw, ga.y + 12 * S), gb2, 13, MUTED);
+                    rgb(ORANGE, (int)(200 * i / gTrail.size())), RULE * S);
+    ImVec2 d = G((float)in.latG, (float)in.lonG);
+    dl->AddRectFilled(ImVec2(d.x - 3 * S, d.y - 3 * S), ImVec2(d.x + 3 * S, d.y + 3 * S), rgb(INK));
     ImGui::Dummy(ImVec2(w, h));
 }
 
-void App::footer(float w) {
+void App::footer(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
-    float h = 64 * S;
-    float bw = 150 * S;
-    // game folder
-    std::string folder = gameDir.empty() ? "No game folder chosen" : u8(gameDir);
-    ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + (h - 34 * S) / 2));
-    if (button(gameDir.empty() ? "Choose game folder" : "Change", false)) {
+    float g = SP6 * S, cy = p0.y + h / 2;
+    dl->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + HAIR * S), rgb(LINE));
+
+    // right: undo, then the primary
+    const char* slotName = fh6::SLOTS[p.slot ? 1 : 0].name;
+    std::string sub = std::string("Replaces ") + slotName;
+    float pw = 260 * S, uw = 150 * S;
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw, cy - 28 * S));
+    if (button("Save to game", Btn::Primary, true, pw, stockOk(), "CTRL+S", sub.c_str())) saveToGame();
+    helpTooltip("Writes the camera into mediapc\\camera in the game folder. Restart FH6 to load it.");
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw - SP4 * S - uw, cy - 20 * S));
+    if (button("Undo save", Btn::Secondary, false, uw, hasBackup())) undoSave();
+    helpTooltip("Puts back the camera files that were in the game before your first save.");
+
+    // left: folder button, path, and a one-line alert
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + g, cy - 20 * S));
+    if (button(gameDir.empty() ? "Choose folder" : "Change folder", Btn::Secondary)) {
         fs::path picked = pickFolder(gameDir);
-        if (!picked.empty()) {
-            gameDir = picked;
-            stockDir.clear();
-            findStock();
-            changed();
-            checkSaved();
-        }
+        if (!picked.empty()) { gameDir = picked; stockDir.clear(); findStock(); changed(); checkSaved(); }
     }
     helpTooltip("The Forza Horizon 6 folder: the one with forzahorizon6.exe (Steam), or its Content folder (Xbox app).");
-    ImGui::SameLine(0, 12 * S);
+    ImGui::SameLine(0, SP4 * S);
     float tx = ImGui::GetCursorScreenPos().x;
-    float textMax = p0.x + w - 2 * bw - 40 * S - tx;
-    // path, then the stock files line or the last message
-    std::string line2;
-    unsigned c2 = MUTED;
-    if (fh6::nowSec() - msgTime < 8) { line2 = msg; c2 = msgColor; }
-    else if (!stockNote.empty()) { line2 = stockNote; c2 = AMBER; }
-    else if (stockOk()) line2 = dirty ? "Not saved to the game yet" : "The game has these settings";
-    dl->PushClipRect(ImVec2(tx, p0.y), ImVec2(tx + textMax, p0.y + h), true);
-    dl->AddText(fonts.regular, 14 * S, ImVec2(tx, p0.y + 13 * S), rgb(gameDir.empty() ? DIM : SMOKE), folder.c_str());
-    dl->AddText(fonts.regular, 13 * S, ImVec2(tx, p0.y + 33 * S), rgb(c2), line2.c_str());
-    dl->PopClipRect();
     if (!stockNote.empty()) {
-        ImGui::SetCursorScreenPos(ImVec2(tx, p0.y + 30 * S));
-        ImGui::InvisibleButton("##stockpick", ImVec2(std::min(textMax, fonts.regular->CalcTextSizeA(13 * S, 1e9f, 0, stockNote.c_str()).x), 18 * S));
-        if (ImGui::IsItemClicked()) {
+        ImGui::SetCursorScreenPos(ImVec2(tx, cy - 20 * S));
+        if (button("Find camera files", Btn::Ghost)) {
             fs::path picked = pickFolder(gameDir);
-            if (!picked.empty()) { stockDir = picked; stockNote = stockOk() ? "" : "That folder doesn't have CameraPhysics.xml and CameraSettings.ini."; changed(); checkSaved(); }
+            if (!picked.empty()) {
+                stockDir = picked;
+                stockNote = stockOk() ? "" : "That folder doesn't have CameraPhysics.xml and CameraSettings.ini.";
+                changed();
+                checkSaved();
+            }
         }
-        if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        helpTooltip("Pick the folder that has the game's own CameraPhysics.xml and CameraSettings.ini.");
+        ImGui::SameLine(0, SP4 * S);
+        tx = ImGui::GetCursorScreenPos().x;
     }
-
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - 2 * bw - 12 * S, p0.y + (h - 34 * S) / 2));
-    if (button("Undo save", false, bw, hasBackup())) undoSave();
-    helpTooltip("Puts back the camera files that were in the game before your first save.");
-    ImGui::SameLine(0, 12 * S);
-    if (button("Save to game", true, bw, stockOk())) saveToGame();
-    helpTooltip("Writes the camera into mediapc\\camera in the game folder. Restart FH6 to load it.");
-    (void)VERSION;
+    float textMax = p0.x + w - g - pw - SP4 * S - uw - SP6 * S - tx;
+    std::string folder = gameDir.empty() ? "No game folder chosen" : u8(gameDir);
+    std::string title, line;
+    unsigned tone = INK_MUTED;
+    if (fh6::nowSec() - msgTime < 8) { title = msgTitle; line = msg; tone = msgColor; }
+    else if (!stockNote.empty()) { title = "Warning"; line = stockNote; tone = ORANGE; }
+    else if (stockOk()) { title = dirty ? "Not saved" : "Saved"; line = dirty ? "The game doesn't have these settings yet." : "The game has these settings."; tone = dirty ? INK_MUTED : COOL; }
+    dl->PushClipRect(ImVec2(tx, p0.y), ImVec2(tx + std::max(0.f, textMax), p0.y + h), true);
+    drawText(dl, ImVec2(tx, cy - 20 * S), Body, gameDir.empty() ? INK_MUTED : INK, folder.c_str());
+    if (!line.empty()) {
+        drawText(dl, ImVec2(tx, cy + 4 * S), Label, tone, title.c_str());
+        drawText(dl, ImVec2(tx + textWidth(Label, title.c_str()) + SP2 * S, cy + 2 * S), Caption, INK, line.c_str());
+    }
+    dl->PopClipRect();
 }

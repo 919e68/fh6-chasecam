@@ -3,6 +3,8 @@
 #include "dataout.hpp"
 #include "sim.hpp"
 #include <deque>
+#include <vector>
+#include "imgui.h"
 #include <filesystem>
 #include <string>
 
@@ -40,7 +42,7 @@ private:
     std::deque<std::pair<float, float>> gTrail;
 
     // feedback
-    std::string msg;
+    std::string msg, msgTitle;
     unsigned msgColor = 0;
     double msgTime = -100;
     std::string stockNote;
@@ -48,7 +50,7 @@ private:
     void loadSettings();
     void saveSettings();
     void changed();
-    void say(const std::string& s, unsigned color);
+    void say(const std::string& title, const std::string& s, unsigned tone);
     void findStock();
     fs::path outDir() const { return gameDir / "mediapc" / "camera"; }
     bool stockOk() const;
@@ -62,5 +64,7 @@ private:
     void controls(float w, float h);
     void previewCard(float w, float h);
     void inputsStrip(float w, float h);
-    void footer(float w);
+    void footer(float w, float h);
+    void chartPanel(ImDrawList* dl, ImVec2 a, ImVec2 b, const char* title, const char* value, const std::vector<fh6::Pt>& curve,
+                    double xMax, double xNow, double xScale, const char* x0Label, const char* x1Label);
 };
