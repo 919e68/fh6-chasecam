@@ -119,7 +119,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     drawSmoke(true);
 
     // car: the S15 mesh (carmesh.cpp), see-through white with
-    // yellow edge lines. All faces back to front, so the far side shows faintly
+    // orange edge lines. All faces back to front, so the far side shows faintly
     // through the near side.
     V3 fwd(std::sin(in.heading), 0, std::cos(in.heading));
     V3 right(fwd.z, 0, -fwd.x);
@@ -180,11 +180,11 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
             q[i] = v.project(fc.c[i]);
         }
         if (!ok) continue;
-        // semi-transparent white; yellow edges kept light because every edge is
+        // semi-transparent white; orange edges kept light because every edge is
         // shared by two faces and the mesh is dense
         ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.front ? fc.shade : 0.35f, fc.front ? 60 : 15);
         dl->AddConvexPolyFilled(q, fc.count, fill);
-        dl->AddPolyline(q, fc.count, rgb(0xFFD43B, fc.front ? 50 : 12), 1.f * S, ImDrawFlags_Closed);
+        dl->AddPolyline(q, fc.count, rgb(ORANGE, fc.front ? 50 : 12), 1.f * S, ImDrawFlags_Closed); // orange edges
     }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
