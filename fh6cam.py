@@ -73,6 +73,8 @@ def edit_ini(text, section, values):
             raise KeyError('%s not found in CameraSettings.ini' % full)
         old = float(m.group(2))
         new = resolve(old, value)
+        if new == old:
+            continue  # no change: keep the stock text
         text = text[:m.start(2)] + fmt(new) + text[m.end(2):]
         changes.append((full, old, new))
     return text, changes
