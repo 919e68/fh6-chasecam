@@ -6,24 +6,28 @@ namespace fh6 {
 
 namespace {
 const double PI = 3.14159265358979323846;
-const double L = 2.25;                          // half length
-const double WHEEL_Z[2] = { -1.36, 1.36 }, WHEEL_R = 0.33, ARCH_R = 0.42;
+// Proportions of a late-90s compact Japanese drift coupe (S15): 4,445 mm long,
+// 1,695 mm wide, 1,285 mm tall, 2,525 mm wheelbase; lowered a little.
+const double L = (4.445 - 0.16) / 2;            // half length of the lofted body; rounded bumpers add 8 cm each end
+const double WHEEL_Z[2] = { -1.25, 1.275 }, WHEEL_R = 0.315, ARCH_R = 0.40;
+const double HALF_W = 0.835, ROOF = 1.255;
 
 double clamp01(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 double smooth(double a, double b, double x) { double t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
 
-// Plan view: half width, with rounded ends, a slightly narrower nose and fender flares
+// Plan view: half width, pointed nose, rounded tail corners, small fender flares
 double halfWidth(double z) {
-    double w = 0.92 * (1 - 0.17 * smooth(1.55, L, std::fabs(z))) * (1 - 0.04 * smooth(0.4, L, z));
-    for (double wz : WHEEL_Z) w += 0.035 * std::exp(-std::pow((z - wz) / 0.5, 2));
+    double w = HALF_W * (1 - 0.13 * smooth(1.6, L, -z)) * (1 - 0.16 * std::pow(smooth(1.2, L, z), 1.3));
+    for (double wz : WHEEL_Z) w += 0.022 * std::exp(-std::pow((z - wz) / 0.45, 2));
     return w;
 }
-// Belt (shoulder) line: drops toward the nose, kicks up a little at the rear, drops at the tail
+// Belt (shoulder) line: a wedge rising toward the tail, a long hood sloping to a low nose
 double belt(double z) {
-    return 0.80 - 0.15 * std::pow(smooth(0.9, L, z), 1.4) + 0.035 * smooth(-0.3, -1.9, z) - 0.07 * smooth(-1.95, -L, z);
+    return 0.80 - 0.03 * z - 0.15 * std::pow(smooth(1.0, L, z), 1.3) - 0.06 * smooth(-1.95, -L, z);
 }
+double deck(double z) { return belt(z) + 0.04; }
 // Floor: rises at the overhangs
-double floorY(double z) { return 0.17 + 0.11 * smooth(1.65, L, z) + 0.09 * smooth(-1.7, -L, z); }
+double floorY(double z) { return 0.13 + 0.10 * smooth(1.6, L, z) + 0.08 * smooth(-1.7, -L, z); }
 // Wheel arch: height of the arch edge above the ground at z (0 outside the arches)
 double archY(double z) {
     double y = 0;
@@ -33,14 +37,23 @@ double archY(double z) {
     }
     return y;
 }
-// Cabin height above the deck: raked windshield, slightly crowned roof, fastback
+// Cabin height above the deck: raked windshield from far back on the hood, a
+// short roof, a sloped rear window onto a short trunk deck
 double cabin(double z) {
-    const double wsBase = 0.98, roofFront = 0.12, roofRear = -0.72, rearBase = -1.62, roofH = 0.47;
+    const double wsBase = 0.82, roofFront = 0.02, roofRear = -0.78, rearBase = -1.42;
+    double top;
     if (z >= wsBase || z <= rearBase) return 0;
-    if (z > roofFront) return roofH * (1 - std::pow((z - roofFront) / (wsBase - roofFront), 1.25));
-    if (z < roofRear) return roofH * (1 - std::pow((roofRear - z) / (roofRear - rearBase), 1.15));
-    double m = (z - (roofFront + roofRear) / 2) / ((roofFront - roofRear) / 2);
-    return roofH * (1 - 0.035 * m * m);
+    if (z > roofFront) {
+        double t = (z - roofFront) / (wsBase - roofFront);
+        top = ROOF + (deck(wsBase) - ROOF) * std::pow(t, 1.2);
+    } else if (z < roofRear) {
+        double t = (roofRear - z) / (roofRear - rearBase);
+        top = ROOF - 0.01 + (deck(rearBase) - (ROOF - 0.01)) * std::pow(t, 1.1);
+    } else {
+        double m = (z - (roofFront + roofRear) / 2) / ((roofFront - roofRear) / 2);
+        top = ROOF - 0.012 * m * m;
+    }
+    return std::max(0.0, top - deck(z));
 }
 
 struct Builder {
@@ -59,9 +72,9 @@ struct Builder {
 // One half section from the bottom centre to the top centre (11 points).
 void halfSection(double z, V3* p) {
     double w = halfWidth(z), b = belt(z), fl = floorY(z), h = cabin(z), arch = archY(z);
-    double deck = b + 0.04;
+    double dk = deck(z);
     double low = std::max(fl + 0.10, arch), bot = std::max(fl, arch); // the arch lifts the outer lower edge
-    double wg = w * 0.80, wr = w * 0.63;
+    double wg = w * 0.82, wr = w * 0.66;
     double crown = h > 0.01 ? 0.02 : 0.03;
     p[0] = V3(0, fl, z);
     p[1] = V3(0.80 * w, bot, z);
@@ -70,10 +83,10 @@ void halfSection(double z, V3* p) {
     p[4] = V3(0.985 * w, std::max(b - 0.08, low + 0.04), z);
     p[5] = V3(0.95 * w, b, z);
     p[6] = V3(0.86 * w, b + 0.035, z);
-    p[7] = V3(wg, deck, z);
-    p[8] = V3(wr + (wg - wr) * 0.3, deck + h * 0.78, z);
-    p[9] = V3(wr, deck + h, z);
-    p[10] = V3(0, deck + h + crown, z);
+    p[7] = V3(wg, dk, z);
+    p[8] = V3(wr + (wg - wr) * 0.3, dk + h * 0.78, z);
+    p[9] = V3(wr, dk + h, z);
+    p[10] = V3(0, dk + h + crown, z);
 }
 
 CarMesh build() {
@@ -147,11 +160,11 @@ CarMesh build() {
         }
     // mirrors and a rear wing on two stands
     for (int sx = -1; sx <= 1; sx += 2) {
-        double z = 0.82, w = halfWidth(z);
+        double z = 0.70, w = halfWidth(z);
         B.box(V3(sx * (w + 0.06), belt(z) + 0.12, z), V3(0.07, 0.045, 0.05), 2);
-        B.box(V3(sx * 0.55, belt(-1.95) + 0.19, -1.98), V3(0.015, 0.15, 0.05), 2);
+        B.box(V3(sx * 0.52, belt(-1.92) + 0.17, -1.94), V3(0.015, 0.13, 0.05), 2);
     }
-    B.box(V3(0, belt(-1.95) + 0.36, -2.0), V3(0.84, 0.018, 0.15), 2);
+    B.box(V3(0, belt(-1.92) + 0.32, -1.97), V3(0.80, 0.018, 0.14), 2);
     return B.m;
 }
 } // namespace
