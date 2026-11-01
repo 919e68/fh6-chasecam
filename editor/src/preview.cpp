@@ -31,7 +31,7 @@ ImU32 mix(unsigned a, unsigned b, float t, int alpha = 255) {
     return IM_COL32(ch(16), ch(8), ch(0), alpha);
 }
 
-struct Face { V3 c[8]; int count; V3 n; float shade; double depth; };
+struct Face { V3 c[8]; int count; V3 n; float shade; double depth; bool front; };
 } // namespace
 
 void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const fh6::CamPose& cam, const fh6::Inputs& in, const fh6::Scene& scene) {
@@ -117,9 +117,9 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     };
     drawSmoke(true);
 
-    // car: a white low-poly coupe lofted through cross-sections along its
-    // length, flat shaded with orange edge lines; wheels first (tucked under
-    // the body), then the body. Painter's order hides the lines of faces behind.
+    // car: a see-through white low-poly coupe lofted through cross-sections
+    // along its length, with yellow edge lines. All faces, back to front: the
+    // far side shows faintly through the near side.
     V3 fwd(std::sin(in.heading), 0, std::cos(in.heading));
     V3 right(fwd.z, 0, -fwd.x);
     V3 up(0, 1, 0);
@@ -143,7 +143,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
         if (nrm.len() < 1e-9) return;
         nrm = nrm.norm();
         if (nrm.dot(ctr - inside) < 0) nrm = nrm * -1.0; // outward
-        if (nrm.dot(v.pos - ctr) <= 0) return;           // facing away
+        f.front = nrm.dot(v.pos - ctr) > 0;              // back faces stay: the shell is see-through
         f.n = nrm;
         f.shade = (float)std::clamp(0.30 + 0.70 * std::max(0.0, nrm.dot(light)), 0.0, 1.0);
         f.depth = v.toCam(ctr).z;
@@ -216,23 +216,22 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
         }
     }
 
-    auto byDepth = [](const Face& x, const Face& y) { return x.depth > y.depth; };
-    std::sort(wheels.begin(), wheels.end(), byDepth);
-    std::sort(body.begin(), body.end(), byDepth);
-    for (auto* list : { &wheels, &body })
-        for (auto& fc : *list) {
-            ImVec2 q[8];
-            bool ok = true;
-            for (int i = 0; i < fc.count; i++) {
-                V3 c = v.toCam(fc.c[i]);
-                if (c.z < v.nearZ) { ok = false; break; }
-                q[i] = v.project(c);
-            }
-            if (!ok) continue;
-            ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.shade); // white paint, shaded
-            dl->AddConvexPolyFilled(q, fc.count, fill);
-            dl->AddPolyline(q, fc.count, rgb(ORANGE), 1.f * S, ImDrawFlags_Closed); // orange wireframe on every polygon edge
+    std::vector<Face> faces(wheels);
+    faces.insert(faces.end(), body.begin(), body.end());
+    std::sort(faces.begin(), faces.end(), [](const Face& x, const Face& y) { return x.depth > y.depth; });
+    for (auto& fc : faces) {
+        ImVec2 q[8];
+        bool ok = true;
+        for (int i = 0; i < fc.count; i++) {
+            V3 c = v.toCam(fc.c[i]);
+            if (c.z < v.nearZ) { ok = false; break; }
+            q[i] = v.project(c);
         }
+        if (!ok) continue;
+        ImU32 shade = mix(0x5E646E, 0xF6F7F9, fc.front ? fc.shade : 0.35f, fc.front ? 115 : 45); // semi-transparent white
+        dl->AddConvexPolyFilled(q, fc.count, shade);
+        dl->AddPolyline(q, fc.count, rgb(0xFFD43B, fc.front ? 215 : 90), 1.f * S, ImDrawFlags_Closed); // yellow edges
+    }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
     ImU32 dim = glass(60);
