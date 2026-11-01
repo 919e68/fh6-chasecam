@@ -31,7 +31,7 @@ ImU32 mix(unsigned a, unsigned b, float t, int alpha = 255) {
     return IM_COL32(ch(16), ch(8), ch(0), alpha);
 }
 
-struct Face { V3 c[4]; V3 n; unsigned color; float shade; double depth; };
+struct Face { V3 c[8]; int count; V3 n; float shade; double depth; };
 } // namespace
 
 void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const fh6::CamPose& cam, const fh6::Inputs& in, const fh6::Scene& scene) {
@@ -117,79 +117,121 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     };
     drawSmoke(true);
 
-    // car: body and cabin as shaded boxes, painter's order
+    // car: a white low-poly coupe lofted through cross-sections along its
+    // length, flat shaded; wheels first (tucked under the body), then the body
     V3 fwd(std::sin(in.heading), 0, std::cos(in.heading));
     V3 right(fwd.z, 0, -fwd.x);
     V3 up(0, 1, 0);
     double rl = in.bodyRoll; // lean the body a little with cornering
     V3 upR = (up * std::cos(rl) - right * std::sin(rl)).norm();
     V3 rightR = upR.cross(fwd).norm(); // x right, y up, z forward
-    std::vector<Face> faces;
-    auto box = [&](double cx, double cz, double y0, double y1, double hw, double hl, double topShrinkW, double topShrinkL, unsigned col) {
-        V3 o = in.pos + V3(0, gy - in.pos.y, 0);
-        auto P = [&](double sx, double sz, double y) {
-            double w = hw - (y == y1 ? topShrinkW : 0), l = hl - (y == y1 ? topShrinkL : 0);
-            return o + rightR * (cx + sx * w) + fwd * (cz + sz * l) + upR * y;
-        };
-        V3 c[8] = { P(-1, -1, y0), P(1, -1, y0), P(1, 1, y0), P(-1, 1, y0), P(-1, -1, y1), P(1, -1, y1), P(1, 1, y1), P(-1, 1, y1) };
-        int idx[6][4] = { { 4, 5, 6, 7 }, { 0, 1, 5, 4 }, { 1, 2, 6, 5 }, { 2, 3, 7, 6 }, { 3, 0, 4, 7 }, { 0, 3, 2, 1 } };
-        V3 bc = o + rightR * cx + fwd * cz + upR * ((y0 + y1) / 2);
-        for (auto& f : idx) {
-            Face fc;
-            for (int i = 0; i < 4; i++) fc.c[i] = c[f[i]];
-            fc.n = (fc.c[1] - fc.c[0]).cross(fc.c[2] - fc.c[1]).norm();
-            V3 ctr = (fc.c[0] + fc.c[1] + fc.c[2] + fc.c[3]) * 0.25;
-            if (fc.n.dot(ctr - bc) < 0) fc.n = fc.n * -1.0; // outward
-            fc.color = col;
-            V3 light = V3(-0.4, 1, -0.3).norm();
-            fc.shade = (float)std::clamp(0.35 + 0.65 * std::max(0.0, fc.n.dot(light)), 0.0, 1.0);
-            fc.depth = v.toCam(ctr).z;
-            if (fc.n.dot(v.pos - ctr) > 0) faces.push_back(fc); // facing the camera
+    V3 o = in.pos + V3(0, gy - in.pos.y, 0);
+    auto P = [&](double x, double y, double z) { return o + rightR * x + upR * y + fwd * z; };
+    const V3 light = V3(-0.35, 1.0, -0.25).norm();
+
+    auto addFace = [&](std::vector<Face>& out, const V3* pts, int n, const V3& inside) {
+        Face f;
+        f.count = n;
+        V3 ctr, nrm;
+        for (int i = 0; i < n; i++) {
+            f.c[i] = pts[i];
+            ctr = ctr + pts[i] * (1.0 / n);
+            const V3 &p0 = pts[i], &p1 = pts[(i + 1) % n]; // Newell normal
+            nrm = nrm + V3((p0.y - p1.y) * (p0.z + p1.z), (p0.z - p1.z) * (p0.x + p1.x), (p0.x - p1.x) * (p0.y + p1.y));
         }
+        if (nrm.len() < 1e-9) return;
+        nrm = nrm.norm();
+        if (nrm.dot(ctr - inside) < 0) nrm = nrm * -1.0; // outward
+        if (nrm.dot(v.pos - ctr) <= 0) return;           // facing away
+        f.n = nrm;
+        f.shade = (float)std::clamp(0.30 + 0.70 * std::max(0.0, nrm.dot(light)), 0.0, 1.0);
+        f.depth = v.toCam(ctr).z;
+        out.push_back(f);
     };
-    box(0, 0, 0.22, 0.72, 0.93, 2.25, 0.06, 0.18, INK);            // body
-    box(0, -0.2, 0.72, 1.20, 0.80, 1.10, 0.15, 0.48, BG300);      // cabin and glass, raked
-    // wheels first (tucked under the body, only their lower part shows), then the body
-    std::vector<Face> body;
-    body.swap(faces);
+
+    // cross-sections, rear to front: z, then heights (bottom, widest, belt, top)
+    // and half widths at those heights. Belt to top is the glass over the cabin.
+    struct Sec { double z, yb, ys, ybelt, ytop, wb, ws, wbelt, wtop; };
+    static const Sec SECS[] = {
+        { -2.25, 0.25, 0.48, 0.70, 0.74, 0.76, 0.85, 0.83, 0.70 }, // rear bumper
+        { -2.07, 0.19, 0.50, 0.80, 0.85, 0.84, 0.92, 0.90, 0.78 }, // trunk lip
+        { -1.45, 0.18, 0.50, 0.82, 0.88, 0.85, 0.93, 0.90, 0.74 }, // base of the rear window
+        { -0.70, 0.18, 0.50, 0.84, 1.27, 0.85, 0.93, 0.88, 0.60 }, // roof, rear
+        { 0.35, 0.18, 0.50, 0.84, 1.29, 0.85, 0.93, 0.88, 0.60 },  // roof, front
+        { 1.05, 0.18, 0.50, 0.81, 0.87, 0.85, 0.93, 0.89, 0.74 },  // base of the windshield
+        { 2.02, 0.20, 0.47, 0.69, 0.74, 0.82, 0.90, 0.86, 0.72 },  // nose
+        { 2.25, 0.27, 0.45, 0.59, 0.62, 0.72, 0.81, 0.79, 0.65 },  // front bumper
+    };
+    const int NS = (int)(sizeof SECS / sizeof SECS[0]);
+    auto ring = [&](const Sec& c, V3* r) {
+        r[0] = P(c.wb, c.yb, c.z);       r[1] = P(c.ws, c.ys, c.z);
+        r[2] = P(c.wbelt, c.ybelt, c.z); r[3] = P(c.wtop, c.ytop, c.z);
+        r[4] = P(-c.wtop, c.ytop, c.z);  r[5] = P(-c.wbelt, c.ybelt, c.z);
+        r[6] = P(-c.ws, c.ys, c.z);      r[7] = P(-c.wb, c.yb, c.z);
+    };
+    std::vector<Face> wheels, body;
+    V3 rings[16][8];
+    for (int i = 0; i < NS; i++) ring(SECS[i], rings[i]);
+    for (int i = 0; i + 1 < NS; i++) {
+        V3 inside = P(0, 0.55, (SECS[i].z + SECS[i + 1].z) / 2);
+        for (int k = 0; k < 8; k++) {
+            V3 q[4] = { rings[i][k], rings[i][(k + 1) % 8], rings[i + 1][(k + 1) % 8], rings[i + 1][k] };
+            addFace(body, q, 4, inside);
+        }
+    }
+    V3 center = P(0, 0.55, 0);
+    addFace(body, rings[0], 8, center);
+    addFace(body, rings[NS - 1], 8, center);
+    // wheels: octagonal, the outer face just inside the body side
     for (int sx = -1; sx <= 1; sx += 2)
-        for (int sz = -1; sz <= 1; sz += 2) box(sx * 0.80, sz * 1.38, 0.0, 0.62, 0.12, 0.32, 0, 0, BG000);
-    auto byDepth = [](const Face& x, const Face& y) { return x.depth > y.depth; };
-    std::sort(faces.begin(), faces.end(), byDepth);
-    std::sort(body.begin(), body.end(), byDepth);
-    faces.insert(faces.end(), body.begin(), body.end());
-    for (auto& fc : faces) {
-        ImVec2 q[4];
-        bool ok = true;
-        for (int i = 0; i < 4; i++) {
-            V3 c = v.toCam(fc.c[i]);
-            if (c.z < v.nearZ) { ok = false; break; }
-            q[i] = v.project(c);
-        }
-        if (!ok) continue;
-        unsigned col = fc.color;
-        ImU32 fill = mix(BG000, col, fc.shade);
-        dl->AddConvexPolyFilled(q, 4, fill);
-        dl->AddPolyline(q, 4, rgb(BG000, 160), 1.f * S, ImDrawFlags_Closed);
-    }
-    // tail lights and a sakura stripe on the rear face
-    {
-        V3 o = in.pos + V3(0, gy - in.pos.y, 0);
-        auto R = [&](double x, double y) { return o + rightR * x + fwd * -2.255 + upR * y; };
-        if (fwd.dot(v.pos - in.pos) < 0) { // rear visible
-            for (int s = -1; s <= 1; s += 2) {
-                V3 c[4] = { R(s * 0.82, 0.62), R(s * 0.45, 0.62), R(s * 0.45, 0.72), R(s * 0.82, 0.72) };
-                ImVec2 q[4];
-                bool ok = true;
-                for (int i = 0; i < 4; i++) { V3 cc = v.toCam(c[i]); if (cc.z < v.nearZ) ok = false; else q[i] = v.project(cc); }
-                if (ok) {
-                    dl->AddConvexPolyFilled(q, 4, rgb(DANGER));
-                    ImVec2 m((q[0].x + q[2].x) / 2, (q[0].y + q[2].y) / 2);
-                    dl->AddCircleFilled(m, 10 * S, rgb(DANGER, 40), 20);
-                }
+        for (int sz = -1; sz <= 1; sz += 2) {
+            const double r = 0.33, cx = sx * 0.80, cz = sz * 1.38, hw = 0.12;
+            V3 in8[8], out8[8];
+            for (int k = 0; k < 8; k++) {
+                double t = (k + 0.5) * 3.14159265 / 4;
+                double yy = r + r * std::cos(t), zz = cz + r * std::sin(t);
+                in8[k] = P(cx - hw, yy, zz);
+                out8[k] = P(cx + hw, yy, zz);
             }
+            V3 wc = P(cx, r, cz);
+            for (int k = 0; k < 8; k++) {
+                V3 q[4] = { in8[k], in8[(k + 1) % 8], out8[(k + 1) % 8], out8[k] };
+                addFace(wheels, q, 4, wc);
+            }
+            addFace(wheels, in8, 8, wc);
+            addFace(wheels, out8, 8, wc);
+        }
+
+    // soft contact shadow on the ground
+    {
+        auto ground = [&](double x, double z) { V3 g = P(x, 0, z); g.y = gy; return g; };
+        for (int pass = 0; pass < 2; pass++) {
+            double ex = pass ? 1.15 : 0.98, ez = pass ? 2.55 : 2.35;
+            V3 c4[4] = { ground(-ex, -ez), ground(ex, -ez), ground(ex, ez), ground(-ex, ez) };
+            ImVec2 q[4];
+            bool ok = true;
+            for (int i = 0; i < 4; i++) { V3 c = v.toCam(c4[i]); if (c.z < v.nearZ) ok = false; else q[i] = v.project(c); }
+            if (ok) dl->AddConvexPolyFilled(q, 4, IM_COL32(0, 0, 0, pass ? 70 : 120));
         }
     }
+
+    auto byDepth = [](const Face& x, const Face& y) { return x.depth > y.depth; };
+    std::sort(wheels.begin(), wheels.end(), byDepth);
+    std::sort(body.begin(), body.end(), byDepth);
+    for (auto* list : { &wheels, &body })
+        for (auto& fc : *list) {
+            ImVec2 q[8];
+            bool ok = true;
+            for (int i = 0; i < fc.count; i++) {
+                V3 c = v.toCam(fc.c[i]);
+                if (c.z < v.nearZ) { ok = false; break; }
+                q[i] = v.project(c);
+            }
+            if (!ok) continue;
+            ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.shade); // white paint, shaded
+            dl->AddConvexPolyFilled(q, fc.count, fill);
+            dl->AddPolyline(q, fc.count, fill, 1.f * S, ImDrawFlags_Closed); // hides seams between faces
+        }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
     ImU32 dim = glass(60);
