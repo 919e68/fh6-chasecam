@@ -118,7 +118,8 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     drawSmoke(true);
 
     // car: a white low-poly coupe lofted through cross-sections along its
-    // length, flat shaded; wheels first (tucked under the body), then the body
+    // length, flat shaded with orange edge lines; wheels first (tucked under
+    // the body), then the body. Painter's order hides the lines of faces behind.
     V3 fwd(std::sin(in.heading), 0, std::cos(in.heading));
     V3 right(fwd.z, 0, -fwd.x);
     V3 up(0, 1, 0);
@@ -230,7 +231,7 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
             if (!ok) continue;
             ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.shade); // white paint, shaded
             dl->AddConvexPolyFilled(q, fc.count, fill);
-            dl->AddPolyline(q, fc.count, fill, 1.f * S, ImDrawFlags_Closed); // hides seams between faces
+            dl->AddPolyline(q, fc.count, rgb(ORANGE), 1.f * S, ImDrawFlags_Closed); // orange wireframe on every polygon edge
         }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
