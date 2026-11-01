@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "gen/jetbrainsmono_medium.inc"
 #include "gen/jetbrainsmono_regular.inc"
@@ -261,7 +262,7 @@ bool button(const char* label, Btn v, bool large, float width, bool enabled, con
     ImVec2 p0(a.x, a.y + drop), p1(a.x + w, a.y + h + drop);
     unsigned fg;
     if (!enabled) {
-        dl->AddRectFilled(p0, p1, rgb(BG300));
+        if (v != Btn::Ghost) dl->AddRectFilled(p0, p1, rgb(BG300));
         fg = INK_DISABLED;
     } else if (v == Btn::Primary) {
         if (sweep > 0) // glow-orange: 0 0 20px rgba(255,106,19,.28)
@@ -316,7 +317,7 @@ bool button(const char* label, Btn v, bool large, float width, bool enabled, con
 // Slider: label + mono value, 2px track with orange fill, 4x16 bar thumb,
 // line-strong center line. Right-click resets, double-click types a value.
 bool slider(const char* id, const char* label, double* v, double mn, double mx, double step,
-            const char* unit, int dec, bool signedDelta, double def, const char* help) {
+            const char* unit, int dec, bool signedDelta, double def, const char* help, bool clampTyped, const double* tick) {
     ImGui::PushID(id);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float w = ImGui::GetContentRegionAvail().x;
@@ -352,6 +353,7 @@ bool slider(const char* id, const char* label, double* v, double mn, double mx, 
 
     float cy = inputTop + inputH / 2, t = (float)((*v - mn) / (mx - mn));
     float tx = x0 + (x1 - x0) * t, mid = (x0 + x1) / 2;
+    if (tick) mid = x0 + (x1 - x0) * (float)std::clamp((*tick - mn) / (mx - mn), 0.0, 1.0);
     dl->AddRectFilled(ImVec2(x0, cy - RULE * S / 2), ImVec2(x1, cy + RULE * S / 2), rgb(BG300));
     dl->AddRectFilled(ImVec2(x0, cy - RULE * S / 2), ImVec2(tx, cy + RULE * S / 2), rgb(ORANGE));
     dl->AddRectFilled(ImVec2(mid - HAIR * S / 2, inputTop), ImVec2(mid + HAIR * S / 2, inputTop + inputH), rgb(LINE_STRONG));
@@ -370,7 +372,7 @@ bool slider(const char* id, const char* label, double* v, double mn, double mx, 
         char f[16];
         std::snprintf(f, sizeof f, "%%.%df", dec);
         if (ImGui::InputDouble("##v", &tmp, 0, 0, f, ImGuiInputTextFlags_EnterReturnsTrue)) {
-            *v = std::clamp(tmp, mn, mx);
+            *v = clampTyped ? std::clamp(tmp, mn, mx) : tmp;
             changed = true;
             ImGui::CloseCurrentPopup();
         }
@@ -466,6 +468,248 @@ void groupTitle(const char* t, bool first) {
         ImGui::Dummy(ImVec2(0, SP2 * S));
     }
     text(Nav, INK, t);
+}
+
+// ---------------------------------------------------------------------------
+// Compact form controls
+void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float sz, ImU32 col) {
+    float k = sz / 14.f, th = 1.5f * k;
+    auto P = [&](float x, float y) { return ImVec2(c.x + (x - 7) * k, c.y + (y - 7) * k); };
+    switch (icon) {
+    case Icon::Plus:
+        dl->AddLine(P(7, 2), P(7, 12), col, th);
+        dl->AddLine(P(2, 7), P(12, 7), col, th);
+        break;
+    case Icon::Copy:
+        dl->AddRect(P(4.5f, 4.5f), P(12, 12), col, 0, th);
+        dl->AddPolyline(std::vector<ImVec2>{ P(9.5f, 2), P(2, 2), P(2, 9.5f) }.data(), 3, col, th, 0);
+        break;
+    case Icon::Up: {
+        ImVec2 p[3] = { P(3, 9), P(7, 5), P(11, 9) };
+        dl->AddPolyline(p, 3, col, th, 0);
+        break;
+    }
+    case Icon::Down:
+    case Icon::Chevron: {
+        ImVec2 p[3] = { P(3, 5), P(7, 9), P(11, 5) };
+        dl->AddPolyline(p, 3, col, th, 0);
+        break;
+    }
+    case Icon::Trash:
+        dl->AddLine(P(2, 3.5f), P(12, 3.5f), col, th);
+        dl->AddLine(P(5.5f, 1.5f), P(8.5f, 1.5f), col, th);
+        dl->AddRect(P(3.5f, 3.5f), P(10.5f, 12.5f), col, 0, th);
+        dl->AddLine(P(6, 6), P(6, 10), col, th);
+        dl->AddLine(P(8, 6), P(8, 10), col, th);
+        break;
+    case Icon::Reset: {
+        dl->PathArcTo(c, 4.5f * k, 3.14159f * 0.25f, 3.14159f * 1.75f, 16);
+        dl->PathStroke(col, th);
+        ImVec2 a = ImVec2(c.x + 4.5f * k * 0.7071f, c.y - 4.5f * k * 0.7071f);
+        dl->AddTriangleFilled(ImVec2(a.x + 2.5f * k, a.y - 2.5f * k), ImVec2(a.x + 2.5f * k, a.y + 1.5f * k), ImVec2(a.x - 1.5f * k, a.y - 2.5f * k), col);
+        break;
+    }
+    case Icon::Lock:
+        dl->AddRect(P(3, 6.5f), P(11, 12.5f), col, 0, th);
+        dl->PathArcTo(P(7, 6.5f), 2.5f * k, 3.14159f, 2 * 3.14159f, 10);
+        dl->PathStroke(col, th);
+        break;
+    case Icon::Search:
+        dl->AddCircle(P(6, 6), 3.8f * k, col, 16, th);
+        dl->AddLine(P(8.8f, 8.8f), P(12, 12), col, th);
+        break;
+    }
+}
+
+bool iconButton(const char* id, Icon icon, bool enabled, const char* help, bool danger) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float s = ROW_H * S;
+    ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + s, a.y + s);
+    ImGui::PushID(id);
+    bool clicked = ImGui::InvisibleButton("##ib", ImVec2(s, s)) && enabled;
+    bool hov = enabled && ImGui::IsItemHovered();
+    helpTooltip(help);
+    ImGui::PopID();
+    if (hov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    unsigned edge = !enabled ? LINE : danger ? (hov ? DANGER : LINE_STRONG) : (hov ? INK : LINE_STRONG);
+    if (hov) dl->AddRectFilled(a, b, rgb(BG300));
+    dl->AddRect(a, b, rgb(edge), 0, HAIR * S);
+    unsigned fg = !enabled ? INK_DISABLED : danger && hov ? DANGER : hov ? INK : INK_MUTED;
+    drawIcon(dl, icon, ImVec2((a.x + b.x) / 2, (a.y + b.y) / 2), 14 * S, rgb(fg));
+    if (ImGui::IsItemFocused() && ImGui::GetIO().NavVisible)
+        dl->AddRect(ImVec2(a.x - 3 * S, a.y - 3 * S), ImVec2(b.x + 3 * S, b.y + 3 * S), rgb(FOCUS_RING), 0, RULE * S);
+    return clicked;
+}
+
+bool numField(const char* id, double* v, float w, int dec, double step, const char* unit, bool enabled) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float h = ROW_H * S;
+    ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
+    ImGui::PushID(id);
+    ImGuiID eid = ImGui::GetID("##edit");
+    ImGuiStorage* st = ImGui::GetStateStorage();
+    bool editing = st->GetBool(eid, false);
+    bool changed = false;
+    if (editing && enabled) {
+        static double tmp;
+        if (st->GetBool(ImGui::GetID("##first"), true)) { tmp = *v; ImGui::SetKeyboardFocusHere(); st->SetBool(ImGui::GetID("##first"), false); }
+        TypeStyle ts = typeStyle(Stat);
+        ImGui::PushFont(ts.font, ts.size);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(SP2 * S, (h - ts.size * S) / 2));
+        ImGui::PushStyleColor(ImGuiCol_Border, rgb(ORANGE));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, rgb(BG000));
+        ImGui::SetNextItemWidth(w);
+        char f[16];
+        std::snprintf(f, sizeof f, "%%.%df", std::max(dec, 3));
+        if (ImGui::InputDouble("##in", &tmp, 0, 0, f, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+            if (std::isfinite(tmp)) { *v = tmp; changed = true; }
+            st->SetBool(eid, false);
+        } else if (ImGui::IsItemDeactivated() || ImGui::IsKeyPressed(ImGuiKey_Escape)) st->SetBool(eid, false);
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar();
+        ImGui::PopFont();
+        ImGui::PopID();
+        return changed;
+    }
+    ImGui::InvisibleButton("##nf", ImVec2(w, h));
+    bool hov = enabled && ImGui::IsItemHovered(), act = enabled && ImGui::IsItemActive();
+    if (hov || act) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (act && ImGui::IsMouseDragging(0, 2)) {
+        ImGuiIO& io = ImGui::GetIO();
+        double k = io.KeyShift ? 0.1 : io.KeyCtrl ? 10 : 1;
+        double d = io.MouseDelta.x / S * step * k;
+        if (d != 0) {
+            double r = std::pow(10.0, dec);
+            double nv = *v + d;
+            // keep sub-step drags accumulating, but show rounded values
+            *v = nv;
+            (void)r;
+            changed = true;
+        }
+    }
+    if (hov && ImGui::IsMouseDoubleClicked(0)) { st->SetBool(eid, true); st->SetBool(ImGui::GetID("##first"), true); }
+    ImGui::PopID();
+    dl->AddRectFilled(a, b, rgb(enabled ? BG100 : BG200));
+    dl->AddRect(a, b, rgb(act ? ORANGE : hov ? INK_MUTED : LINE_STRONG), 0, HAIR * S);
+    char num[48];
+    fmtNum(num, sizeof num, *v, dec, false);
+    float uw = unit && *unit ? textWidth(Stat, unit) + SP1 * S : 0;
+    float ty = a.y + (h - 13 * S) / 2 - 1 * S;
+    dl->PushClipRect(a, b, true);
+    drawText(dl, ImVec2(b.x - SP2 * S - uw - textWidth(Stat, num), ty), Stat, enabled ? INK : INK_DISABLED, num);
+    if (uw > 0) drawText(dl, ImVec2(b.x - SP2 * S - uw + SP1 * S, ty), Stat, INK_MUTED, unit);
+    dl->PopClipRect();
+    if (ImGui::IsItemFocused() && ImGui::GetIO().NavVisible)
+        dl->AddRect(ImVec2(a.x - 3 * S, a.y - 3 * S), ImVec2(b.x + 3 * S, b.y + 3 * S), rgb(FOCUS_RING), 0, RULE * S);
+    return changed;
+}
+
+bool combo(const char* id, int* cur, const char* const* labels, int n, float w, const char* const* helps, const bool* dim, const char* fallback) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float h = ROW_H * S;
+    ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
+    ImGui::PushID(id);
+    bool clicked = ImGui::InvisibleButton("##cb", ImVec2(w, h));
+    bool hov = ImGui::IsItemHovered();
+    if (hov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    if (clicked) ImGui::OpenPopup("##list");
+    bool open = ImGui::IsPopupOpen("##list");
+    dl->AddRectFilled(a, b, rgb(BG100));
+    dl->AddRect(a, b, rgb(open ? ORANGE : hov ? INK_MUTED : LINE_STRONG), 0, HAIR * S);
+    const char* shown = *cur >= 0 && *cur < n ? labels[*cur] : (fallback ? fallback : "");
+    dl->PushClipRect(a, ImVec2(b.x - 22 * S, b.y), true);
+    drawText(dl, ImVec2(a.x + SP2 * S, a.y + (h - 14 * S) / 2 - 2 * S), Body, *cur >= 0 && *cur < n && !(dim && dim[*cur]) ? INK : INK_MUTED, shown);
+    dl->PopClipRect();
+    drawIcon(dl, Icon::Chevron, ImVec2(b.x - 12 * S, (a.y + b.y) / 2), 12 * S, rgb(INK_MUTED));
+    bool changed = false;
+    float pw = std::max(w, helps ? 340 * S : w);
+    ImGui::SetNextWindowPos(ImVec2(a.x, b.y + 2 * S));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(pw, 0), ImVec2(pw, 380 * S));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(1 * S, 1 * S));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(LINE_STRONG));
+    if (ImGui::BeginPopup("##list")) {
+        ImDrawList* pl = ImGui::GetWindowDrawList();
+        for (int i = 0; i < n; i++) {
+            float rh = (helps && helps[i] && *helps[i] ? 42 : 28) * S;
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            float iw = ImGui::GetContentRegionAvail().x;
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("##it", ImVec2(iw, rh))) { if (*cur != i) { *cur = i; changed = true; } ImGui::CloseCurrentPopup(); }
+            bool ih = ImGui::IsItemHovered();
+            if (i == *cur && ImGui::IsWindowAppearing()) ImGui::SetScrollHereY(0.3f);
+            ImGui::PopID();
+            if (ih) pl->AddRectFilled(p, ImVec2(p.x + iw, p.y + rh), rgb(BG300));
+            if (i == *cur) pl->AddRectFilled(p, ImVec2(p.x + RULE * S, p.y + rh), rgb(ORANGE));
+            bool dm = dim && dim[i];
+            drawText(pl, ImVec2(p.x + SP3 * S, p.y + 5 * S), Body, dm ? INK_DISABLED : (i == *cur || ih ? INK : INK_MUTED), labels[i]);
+            if (helps && helps[i] && *helps[i]) {
+                pl->PushClipRect(p, ImVec2(p.x + iw - SP2 * S, p.y + rh), true);
+                drawText(pl, ImVec2(p.x + SP3 * S, p.y + 23 * S), Caption, dm ? INK_DISABLED : INK_MUTED, helps[i]);
+                pl->PopClipRect();
+            }
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    ImGui::PopID();
+    return changed;
+}
+
+bool smallToggle(const char* id, bool* v, const char* help) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float h = ROW_H * S;
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::PushID(id);
+    bool changed = false;
+    if (ImGui::InvisibleButton("##st", ImVec2(32 * S, h))) { *v = !*v; changed = true; }
+    bool hov = ImGui::IsItemHovered();
+    helpTooltip(help);
+    float k = anim(ImGui::GetID("k"), *v, 0.12f);
+    ImGui::PopID();
+    if (hov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    ImVec2 ta(p.x, p.y + (h - 16 * S) / 2), tb(ta.x + 32 * S, ta.y + 16 * S);
+    if (*v) dl->AddRectFilled(ta, tb, rgb(ORANGE));
+    else dl->AddRect(ta, tb, rgb(hov ? INK : LINE_STRONG), 0, HAIR * S);
+    float tx = ta.x + (4 + 16 * k) * S;
+    dl->AddRectFilled(ImVec2(tx, ta.y + 4 * S), ImVec2(tx + 8 * S, ta.y + 12 * S), rgb(*v ? ON_ORANGE : INK_MUTED), 2 * S);
+    return changed;
+}
+
+bool searchBox(const char* id, char* buf, size_t n, const char* hint, float w) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float h = ROW_H * S;
+    ImVec2 a = ImGui::GetCursorScreenPos();
+    TypeStyle ts = typeStyle(Body);
+    ImGui::PushFont(ts.font, ts.size);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(28 * S, (h - ts.size * S) / 2 - 1 * S));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(LINE_STRONG));
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, rgb(INK_DISABLED));
+    ImGui::SetNextItemWidth(w);
+    bool ch = ImGui::InputTextWithHint(id, hint, buf, n);
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+    ImGui::PopFont();
+    drawIcon(dl, Icon::Search, ImVec2(a.x + 14 * S, a.y + h / 2), 13 * S, rgb(INK_MUTED));
+    return ch;
+}
+
+void formLabel(const char* label, float labelW, const char* help) {
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float h = ROW_H * S;
+    ImGui::PushID(label);
+    ImGui::PushID((int)(p.y / S));
+    ImGui::InvisibleButton("##fl", ImVec2(labelW, h));
+    ImGui::PopID();
+    ImGui::PopID();
+    bool hov = ImGui::IsItemHovered();
+    helpTooltip(help);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->PushClipRect(p, ImVec2(p.x + labelW - SP2 * S, p.y + h), true);
+    drawText(dl, ImVec2(p.x, p.y + (h - 11 * S) / 2 - 1 * S), Label, hov && help ? INK : INK_MUTED, label);
+    dl->PopClipRect();
+    ImGui::SameLine(0, 0);
 }
 
 } // namespace ui

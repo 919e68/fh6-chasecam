@@ -52,7 +52,7 @@ std::string layer(const std::string& in, const std::string& out, double px, doub
 // ---------------------------------------------------------------------------
 // CameraSettings.ini: first line "<ws>Section\Key<ws>value", value replaced
 // ---------------------------------------------------------------------------
-static bool isWs(char c) { return c == ' ' || c == '\t'; }
+bool isWs(char c) { return c == ' ' || c == '\t'; }
 static bool isSpace(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'; }
 
 std::string editIni(const std::string& t, const std::string& section, const std::string& key,
@@ -84,9 +84,7 @@ std::string editIni(const std::string& t, const std::string& section, const std:
 // ---------------------------------------------------------------------------
 // CameraPhysics.xml
 // ---------------------------------------------------------------------------
-struct Span { size_t start, body, end; };
-
-static Span sectionSpan(const std::string& t, const std::string& name) {
+XmlSpan xmlSection(const std::string& t, const std::string& name) {
     std::string open = "<" + name;
     size_t p = 0;
     while ((p = t.find(open, p)) != std::string::npos) {
@@ -106,7 +104,7 @@ static Span sectionSpan(const std::string& t, const std::string& name) {
 }
 
 // <Layer ... /> occurrences in [a, b): (start, one past end)
-static std::vector<std::pair<size_t, size_t>> layersIn(const std::string& t, size_t a, size_t b) {
+std::vector<std::pair<size_t, size_t>> xmlLayers(const std::string& t, size_t a, size_t b) {
     std::vector<std::pair<size_t, size_t>> out;
     size_t p = a;
     while ((p = t.find("<Layer", p)) != std::string::npos && p < b) {
@@ -121,18 +119,18 @@ static std::vector<std::pair<size_t, size_t>> layersIn(const std::string& t, siz
 }
 
 int countLayers(const std::string& t, const std::string& section) {
-    Span s = sectionSpan(t, section);
-    return (int)layersIn(t, s.body, s.end).size();
+    XmlSpan s = xmlSection(t, section);
+    return (int)xmlLayers(t, s.body, s.end).size();
 }
 
 std::string appendLayers(const std::string& t, const std::string& section, const std::vector<std::string>& add) {
-    Span s = sectionSpan(t, section);
+    XmlSpan s = xmlSection(t, section);
     std::string nl = t.find("\r\n") != std::string::npos ? "\r\n" : "\n";
     std::string seg = t.substr(s.body, s.end - s.body);
     if (!add.empty()) {
         // indentation of the section's first layer that starts its own line
         std::string ind = "  ";
-        for (auto& l : layersIn(t, s.start, s.end)) {
+        for (auto& l : xmlLayers(t, s.start, s.end)) {
             size_t ln = t.rfind('\n', l.first);
             if (ln != std::string::npos && ln >= s.start) {
                 bool ok = true;
@@ -147,7 +145,7 @@ std::string appendLayers(const std::string& t, const std::string& section, const
         for (auto& l : add) core += ind + l + nl;
         seg = core + tail;
     }
-    size_t count = layersIn(seg, 0, seg.size()).size();
+    size_t count = xmlLayers(seg, 0, seg.size()).size();
     std::string head = t.substr(s.start, s.body - s.start);
     size_t a = head.find("NumLayers=\"") + 11, b = head.find('"', a);
     head = head.substr(0, a) + std::to_string(count) + head.substr(b);
@@ -155,6 +153,18 @@ std::string appendLayers(const std::string& t, const std::string& section, const
 }
 
 // ---------------------------------------------------------------------------
+std::vector<std::string> quickLayers(const CamParams& p) {
+    double aim = (p.flipAim ? -1 : 1) * p.cornerAim, tilt = (p.flipTilt ? -1 : 1) * p.driftTilt;
+    std::vector<std::string> add;
+    if (p.cornerAim != 0)
+        add.push_back(layer("Slip_Lateral", "CameraSpaceYPROffset", aim, 0, 0, -DRIFT_CLAMP, DRIFT_CLAMP, DRIFT_CURVE, true, p.driftSmooth, 1));
+    if (p.driftTilt != 0)
+        add.push_back(layer("Slip_Lateral", "CameraSpaceYPROffset", 0, 0, tilt, -DRIFT_CLAMP, DRIFT_CLAMP, DRIFT_CURVE, true, p.driftSmooth * 0.8, 1));
+    if (p.speedFov != 0)
+        add.push_back(layer("SpeedMPH", "FOV", p.speedFov, 0, 0, 0, 200, SPEED_CURVE, false, 20, 1));
+    return add;
+}
+
 Built build(const std::string& stockIni, const std::string& stockXml, const CamParams& p) {
     const Slot& sl = SLOTS[p.slot ? 1 : 0];
     Built r;
@@ -175,14 +185,7 @@ Built build(const std::string& stockIni, const std::string& stockXml, const CamP
         ini = editIni(ini, sl.ini, e.key, e.v, e.rel, e.scale, &c);
         r.changes.push_back(c);
     }
-    double aim = (p.flipAim ? -1 : 1) * p.cornerAim, tilt = (p.flipTilt ? -1 : 1) * p.driftTilt;
-    std::vector<std::string> add;
-    if (p.cornerAim != 0)
-        add.push_back(layer("Slip_Lateral", "CameraSpaceYPROffset", aim, 0, 0, -DRIFT_CLAMP, DRIFT_CLAMP, DRIFT_CURVE, true, p.driftSmooth, 1));
-    if (p.driftTilt != 0)
-        add.push_back(layer("Slip_Lateral", "CameraSpaceYPROffset", 0, 0, tilt, -DRIFT_CLAMP, DRIFT_CLAMP, DRIFT_CURVE, true, p.driftSmooth * 0.8, 1));
-    if (p.speedFov != 0)
-        add.push_back(layer("SpeedMPH", "FOV", p.speedFov, 0, 0, 0, 200, SPEED_CURVE, false, 20, 1));
+    std::vector<std::string> add = quickLayers(p);
     r.layersBefore = countLayers(stockXml, sl.xml);
     r.xml = appendLayers(stockXml, sl.xml, add);
     r.layersAfter = countLayers(r.xml, sl.xml);

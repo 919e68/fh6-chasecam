@@ -50,8 +50,16 @@ std::string fmtShort(double v);                        // "1.327", "-0.8", "66"
 std::string editIni(const std::string& text, const std::string& section, const std::string& key,
                     double value, bool relative, bool scaled, IniChange* change);
 int countLayers(const std::string& text, const std::string& section);
+// A camera section of CameraPhysics.xml: '<' of the open tag, just past its '>', and the '<' of the close tag.
+struct XmlSpan { size_t start, body, end; };
+XmlSpan xmlSection(const std::string& text, const std::string& name);
+std::vector<std::pair<size_t, size_t>> xmlLayers(const std::string& text, size_t a, size_t b); // <Layer ... /> spans in [a, b)
+bool isWs(char c);
 std::string appendLayers(const std::string& text, const std::string& section,
                          const std::vector<std::string>& layers);
+
+// The effect layers the drift setup adds to its chase camera.
+std::vector<std::string> quickLayers(const CamParams& p);
 
 // Builds both files from the stock text and the parameters.
 struct Built { std::string ini, xml; std::vector<IniChange> changes; int layersBefore = 0, layersAfter = 0; };

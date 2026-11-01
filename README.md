@@ -19,25 +19,36 @@ FH6 ChaseCam builds both files from Playground's originals. It edits the origina
 
 ## Editor
 
-**Forza Horizon Camera Editor** (`FH6ChaseCam.exe`) is a small Windows app (C++, Dear ImGui, Direct3D 11) to tune the camera with a live preview. It uses the Countersteer UI kit (garage theme): graphite grounds, orange as the one accent, cut corners, Oxanium, Saira and JetBrains Mono.
+**Forza Horizon Camera Editor** (`FH6ChaseCam.exe`) is a small Windows app (C++, Dear ImGui, Direct3D 11) that edits every camera setting FH6 reads, with a live preview. It uses the Countersteer UI kit (garage theme): graphite grounds, orange as the one accent, cut corners, Oxanium, Saira and JetBrains Mono.
 
-- Sliders for height, distance, aim height, field of view, rotation follow, look into the corner, horizon tilt and drift response. Right-click a slider to reset it, double-click to type a value.
-- **Live preview.** With FH6's Data Out on, the preview follows your real driving: speed, drift angle, tyre slip and G-forces. Without it, a demo drive runs. The preview approximates the game's camera; FH6 is the final check.
-- **What the camera reacts to.** Curves for the drift effects and speed widening, with a marker at your current slip and speed, plus a G-force circle.
-- **Save to game** (Ctrl+S) writes `mediapc\camera` in the game folder. On first save it backs up any camera files already there; **Undo save** puts them back. Restart FH6 to load a new camera.
+Three pages:
+
+- **Drift setup.** The quick drift camera: height, distance, aim height, field of view, rotation follow, look into the corner, horizon tilt and drift response, on Chase Near or Chase Far.
+- **Camera settings.** All 140 keys of `CameraSettings.ini`, grouped by camera (Chase Near, Chase Far, Cockpit, Hood, Bumper, Photo mode, Free cam, Other), each with its unit, a typical range and a confidence label (Known, Likely, Unsure). Point at a setting to see what it does, the game's value, the value after the drift setup, the horizontal FOV for FOV keys and the swing of a spring pair. Keys the game may read but its file leaves out (from older Forza games) can be added.
+- **Effect layers.** Every layer of `CameraPhysics.xml` per camera section, with a filter. Turn layers on or off, add one from a template (fixed offset, drift look, corner lean, brake dive, speed FOV, speed shake, landing jolt, idle sway), duplicate, reorder or delete. The layer form shows only the fields its switches use: input and range, rate of change, smoothing, region, output and its components, spring or kick spring, response curve with draggable points and a mirrored half, and noise.
+
+![Camera settings](docs/settings.png)
+![Effect layers](docs/layers.png)
+
+How it fits together:
+
+- **Save to game** (Ctrl+S) writes both files into `mediapc\camera`: the game's own files, then your key and layer edits, then the drift setup on its chase camera. Lines and layers you didn't touch stay byte-for-byte the same, layers are written in the game's attribute order, and `NumLayers` is always the real count. On first save it backs up any camera files already there; **Undo save** puts them back. Restart FH6 to load a new camera.
+- **Live preview.** The preview runs the files you are about to save: the chase camera from the ini (distance behind the car, height clamped between the lowest and highest height, the turn spring) and the camera's effect layers on top. With FH6's Data Out on it follows your real driving (speed, drift angle, tyre slip, G-forces, suspension); without it a demo drive runs. On the Effect layers page a blue marker shows each layer's current input on its curve. Inputs the preview can't produce (crashes, wind, head tracking) stay at zero. It approximates the game; FH6 is the final check.
+- None of this is documented by Playground. Meanings come from Forza Horizon 1 game code (same key names and layer format), FH4's own `CameraPhysics.xml` and patterns in FH6 camera files, so every setting carries a confidence label. Many cars have their own camera position in the game's database, which replaces the global position keys for them.
 
 Setup:
 
-1. Choose your FH6 folder (the one with `forzahorizon6.exe`, or the Xbox app's `Content` folder). The editor finds the game's own camera files in it.
+1. Choose your FH6 folder (the one with `forzahorizon6.exe`, or the Xbox app's `Content` folder). The editor finds the game's own camera files in it. Until then the pages show typical values and layers can't be edited.
 2. In FH6: Settings > HUD and Gameplay > Data Out **On**, IP `127.0.0.1`, port `5607` (or the port set in the editor; ports 5200 to 5300 are taken by the game).
 
-Settings are kept in `fh6chasecam-editor.ini` next to the exe.
+Settings are kept in `fh6chasecam-editor.ini` and your edits in `fh6chasecam-edits.txt`, both next to the exe.
 
 ### Build the editor
 
 ```sh
 sh editor/build.sh          # Linux with mingw-w64, or MSYS2 MinGW64 on Windows
 sh editor/build.sh test     # native core tests
+sh editor/build.sh test --ref DIR   # also check against real camera files in DIR
 ```
 
 Output: `editor/build/FH6ChaseCam.exe`, a single static exe.

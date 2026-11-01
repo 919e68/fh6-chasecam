@@ -1,4 +1,5 @@
 #include "sim.hpp"
+#include "schema.hpp"
 #include <algorithm>
 
 namespace fh6 {
@@ -41,7 +42,7 @@ Inputs DemoDrive::step(double dt) {
     // alternate left and right corners every 3.2 s, with a short straight
     double phase = std::sin(2 * PI * t_ / 6.4);
     double k = 0.05 * std::copysign(std::pow(std::fabs(phase), 0.6), phase); // path curvature, 1/m (+ = right)
-    speed_ = 21 + 2.5 * std::sin(2 * PI * t_ / 9.0);
+    speed_ = 15 + 2 * std::sin(2 * PI * t_ / 9.0); // ~55 km/h: about 1 G at full lock, like a tight drift
     travel_ += speed_ * k * dt;
     // drift angle: nose points into the corner; builds and unwinds smoothly
     double target = -k / 0.05 * 38 * DEG;
@@ -88,53 +89,133 @@ Inputs TelemetryInputs::update(const Telemetry& t, double dt) {
     in.lonG = t.accel[2] / 9.81;
     in.bodyRoll = t.roll;
     in.bodyPitch = t.pitch;
+    in.slipLon = 0.5 * (t.slipRatio[2] + t.slipRatio[3]);
+    in.slipAll = 0.5 * (t.combinedSlip[2] + t.combinedSlip[3]);
+    in.suspLon = 0.5 * (t.suspNorm[0] + t.suspNorm[1]) - 0.5 * (t.suspNorm[2] + t.suspNorm[3]);
+    in.suspLat = 0.5 * (t.suspNorm[0] + t.suspNorm[2]) - 0.5 * (t.suspNorm[1] + t.suspNorm[3]);
+    in.vertAcc = t.accel[1];
+    bool air = t.suspNorm[0] < 0.01f && t.suspNorm[1] < 0.01f && t.suspNorm[2] < 0.01f && t.suspNorm[3] < 0.01f;
+    airTime_ = air ? airTime_ + dt : 0;
+    in.airTime = airTime_;
+    in.telemetry = true;
     return in;
 }
 
 // ---------------------------------------------------------------------------
-// Rough stock chase cameras: distance, height, aim height, FOV, max FOV.
-struct Base { double dist, height, target, fov, maxFov; };
-static const Base BASES[2] = { { 4.6, 1.55, 0.75, 55, 70 }, { 6.2, 2.10, 0.90, 60, 70 } };
+void fillInputs(const Inputs& in, InputFrame& f) {
+    auto set = [&](const char* name, double v, bool sim = true) {
+        int i = inputIndex(name);
+        if (i >= 0) { f.v[i] = v; f.sim[i] = sim; }
+    };
+    double mph = in.speed * 2.23694;
+    set("SpeedMPH", mph);
+    set("Speed", std::min(mph / 240, 1.0));
+    set("Gs_Longitudinal", in.lonG);
+    set("Gs_Lateral", in.latG);
+    set("Slip_Lateral", in.slip);
+    set("Slip_Longitudinal", in.slipLon, in.telemetry);
+    set("Slip", in.telemetry ? in.slipAll : std::fabs(in.slip));
+    set("SuspensionBias_Longitudinal", in.suspLon, in.telemetry);
+    set("SuspensionBias_Lateral", in.suspLat, in.telemetry);
+    set("SuspensionAngleBias_Longitudinal", in.bodyPitch / DEG);
+    set("SuspensionAngleBias_Lateral", in.bodyRoll / DEG);
+    set("PitchAngleDegrees", in.bodyPitch / DEG);
+    set("VerticalAcceleration", in.vertAcc, in.telemetry);
+    set("OnRoadVerticalAcceleration", in.vertAcc, in.telemetry);
+    set("OneWhenStationary", in.speed < 0.5 ? 1 : 0);
+    set("TimeInAir", in.airTime, in.telemetry);
+    set("ConstantOne", 1);
+}
 
-CamPose CameraSim::step(const CamParams& p, const Inputs& in, double dt, bool followTravel) {
-    const Base& b = BASES[p.slot ? 1 : 0];
-    double want = followTravel ? in.travel : in.heading;
-    double drift = std::copysign(curveAt(DRIFT_CURVE, std::fabs(in.slip)), in.slip);
-    // into the corner: the nose side, so a left-hand drift (drift > 0) turns the view left
-    double aimT = -drift * p.cornerAim * DEG;
-    double rollT = drift * p.driftTilt * DEG;  // + leans the picture toward the outside
-    double sfovT = p.speedFov * curveAt(SPEED_CURVE, in.speed * 2.23694);
-    if (!init_) {
-        yaw_ = want; yawV_ = 0; aim_ = aimT; aimV_ = 0; roll_ = rollT; rollV_ = 0; sfov_ = sfovT; sfovV_ = 0;
-        init_ = true;
-    }
-    yaw_ = want + wrapAngle(yaw_ - want);
-    spring(yaw_, yawV_, want, 8.5 * std::max(p.follow, 0.05), 0.9, dt, 4.05);
-    spring(aim_, aimV_, aimT, std::max(p.driftSmooth, 0.5), 1, dt);
-    spring(roll_, rollV_, rollT, std::max(p.driftSmooth * 0.8, 0.5), 1, dt);
-    spring(sfov_, sfovV_, sfovT, 20, 1, dt);
+// Car box for the FH1 chase formula: roof height and half length (the S15).
+static const double CAR_TOP = 1.30, CAR_HALF = 2.22;
+static const double BASE_H[2] = { 0.35, 0.6 }, BASE_R[2] = { 2.95, 3.1 }; // FH1's base offsets, low / high
 
-    double dist = std::max(1.0, b.dist + p.radiusOfs);
-    double h = std::max(0.25, b.height + p.heightOfs);
-    double tgt = b.target + p.targetOfs;
-    V3 back(std::sin(yaw_), 0, std::cos(yaw_));
-    CamPose c;
-    c.pos = in.pos - back * dist + V3(0, h, 0);
-    V3 dir = (in.pos + V3(0, tgt, 0) - c.pos).norm();
-    // corner aim: turn the view around world up (+ = right)
-    double ca = std::cos(aim_), sa = std::sin(aim_);
-    dir = V3(dir.x * ca + dir.z * sa, dir.y, dir.z * ca - dir.x * sa).norm();
-    V3 right = V3(0, 1, 0).cross(dir).norm(); // with x right, y up, z forward
-    V3 up = dir.cross(right).norm();
-    // tilt: lean the camera's up toward the outside of the corner
-    double cr = std::cos(roll_), sr = std::sin(roll_);
-    c.up = (up * cr + right * sr).norm();
-    c.dir = dir;
-    c.fov = std::clamp(b.fov + p.fovAdd + sfov_, 20.0, b.maxFov + p.maxFovAdd);
-    c.aimDeg = aim_ / DEG;
-    c.tiltDeg = roll_ / DEG;
-    c.fovNow = c.fov;
+ChaseConfig chaseConfig(const std::map<std::string, double>& ini, int slot) {
+    std::string pre = slot ? "FollowHighCam\\" : "FollowLowCam\\";
+    auto get = [&](const char* k) {
+        auto it = ini.find(pre + k);
+        if (it != ini.end()) return it->second;
+        const KeyInfo* ki = findKey(pre + k);
+        return ki ? ki->def : 0.0;
+    };
+    ChaseConfig c;
+    c.slot = slot;
+    c.heightOfs = get("HeightOffsetGlobal");
+    c.radiusOfs = get("RadiusOffsetGlobal");
+    c.targetOfs = get("TargetYOffsetGlobal");
+    c.hMin = get("HeightMinAboveGround");
+    c.hMax = get("HeightMaxAboveGround");
+    c.fov = get("FOV");
+    c.minFov = get("MinFOV");
+    c.maxFov = get("MaxFOV");
+    c.yK = get("Spring\\YRotSpringK");
+    c.yD = get("Spring\\YRotSpringD");
+    c.yCar = get("Spring\\YRotCarDampScale");
+    c.yMax = get("Spring\\YRotMaxSpeed");
+    c.hK = get("Spring\\HeightSpringK");
+    c.hD = get("Spring\\HeightSpringD");
+    c.hKAir = get("Spring\\HeightSpringKInAir");
+    c.hDAir = get("Spring\\HeightSpringDInAir");
     return c;
+}
+
+// rotate v around unit axis k by angle a (right hand)
+static V3 rot(const V3& v, const V3& k, double a) {
+    double c = std::cos(a), s = std::sin(a);
+    return v * c + k.cross(v) * s + k * (k.dot(v) * (1 - c));
+}
+
+CamPose CameraSim::step(const ChaseConfig& c, const LayerOut& lo, const Inputs& in, double dt, bool followTravel) {
+    double want = followTravel ? in.travel : in.heading;
+    if (!init_) { yaw_ = want; yawV_ = 0; lastWant_ = want; hY_ = in.pos.y; hV_ = 0; init_ = true; }
+    double carRate = wrapAngle(want - lastWant_) / std::max(dt, 1e-4);
+    lastWant_ = want;
+    yaw_ = want + wrapAngle(yaw_ - want);
+    // FH1: yaw_vel += dt (K err - D (yaw_vel - CarDampScale car_yaw_rate)), capped at YRotMaxSpeed
+    double rest = CAR_TOP + BASE_H[c.slot ? 1 : 0] + c.heightOfs;
+    double h = c.hMin <= c.hMax ? std::clamp(rest, c.hMin, c.hMax) : rest;
+    double tgt = CAR_TOP + c.targetOfs + (h - rest); // the aim moves with the clamp
+    double ty = in.pos.y + std::max(0.15, h);
+    bool air = in.airTime > 0.2;
+    double hk = std::max(0.0, air ? c.hKAir : c.hK), hd = std::max(0.0, air ? c.hDAir : c.hD);
+    int n = std::max(1, (int)std::ceil(dt / 0.001));
+    double st = dt / n, ymax = std::max(0.01, c.yMax);
+    for (int i = 0; i < n; i++) {
+        double err = wrapAngle(want - yaw_);
+        yawV_ += st * (c.yK * err - c.yD * (yawV_ - c.yCar * carRate));
+        yawV_ = std::clamp(yawV_, -ymax, ymax);
+        yaw_ += yawV_ * st;
+        hV_ += st * ((ty - hY_) * hk - hd * hV_);
+        hY_ += hV_ * st;
+    }
+    if (!std::isfinite(yaw_) || !std::isfinite(hY_)) { yaw_ = want; yawV_ = 0; hY_ = ty; hV_ = 0; }
+
+    double dist = std::max(0.8, CAR_HALF + BASE_R[c.slot ? 1 : 0] + c.radiusOfs);
+    V3 fwd(std::sin(yaw_), 0, std::cos(yaw_)), right(fwd.z, 0, -fwd.x), up0(0, 1, 0);
+    CamPose p;
+    p.pos = V3(in.pos.x, hY_, in.pos.z) - fwd * dist;
+    // car-space offsets move the rig before it aims (rig axes: the camera's yaw)
+    p.pos = p.pos + right * lo.carXYZ[0] + up0 * lo.carXYZ[1] + fwd * lo.carXYZ[2];
+    V3 dir = (in.pos + V3(0, tgt, 0) - p.pos).norm();
+    // rotations, in degrees: yaw + turns left, pitch + looks up, roll + leans the picture right
+    double yawT = lo.carYPR[0] + lo.camYPR[0], pitchT = lo.carYPR[1] + lo.camYPR[1], rollT = lo.carYPR[2] + lo.camYPR[2];
+    dir = rot(dir, up0, -yawT * DEG).norm();
+    V3 r = up0.cross(dir).norm();
+    dir = rot(dir, r, -pitchT * DEG).norm();
+    r = up0.cross(dir).norm();
+    V3 u = dir.cross(r).norm();
+    u = rot(u, dir, -rollT * DEG).norm();
+    r = u.cross(dir).norm();
+    p.pos = p.pos + r * lo.camXYZ[0] + u * lo.camXYZ[1] + dir * lo.camXYZ[2];
+    p.dir = dir;
+    p.up = u;
+    double lo_ = std::max(1.0, std::min(c.minFov, c.maxFov)), hi = std::max(lo_, c.maxFov);
+    p.fov = std::clamp(c.fov + lo.fov, lo_, hi);
+    p.aimDeg = yawT;
+    p.tiltDeg = rollT;
+    p.fovNow = p.fov;
+    return p;
 }
 
 // ---------------------------------------------------------------------------

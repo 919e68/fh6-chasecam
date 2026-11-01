@@ -54,7 +54,8 @@ float buttonWidth(const char* label, Btn variant, bool large = false, const char
 bool button(const char* label, Btn variant, bool large = false, float width = 0, bool enabled = true,
             const char* hint = nullptr, const char* sublabel = nullptr);
 bool slider(const char* id, const char* label, double* v, double min, double max, double step,
-            const char* unit, int decimals, bool signedDelta, double def, const char* help);
+            const char* unit, int decimals, bool signedDelta, double def, const char* help, bool clampTyped = true,
+            const double* tick = nullptr); // tick: value marked on the track (default: the middle)
 bool toggle(const char* id, const char* label, bool* v, const char* help);
 bool segmentTabs(const char* id, int* v, const char* const* items, int n);
 float segmentTabsWidth(const char* const* items, int n);
@@ -63,6 +64,21 @@ void tag(ImDrawList* dl, ImVec2 pos, Tone tone, const char* t); // outline, one 
 float tagWidth(const char* t);
 void groupTitle(const char* t, bool first); // hairline above, then the group name
 void helpTooltip(const char* help);
+
+// Compact form controls (28 px rows)
+constexpr float ROW_H = 28;
+enum class Icon { Plus, Copy, Up, Down, Trash, Reset, Chevron, Lock, Search };
+void drawIcon(ImDrawList* dl, Icon icon, ImVec2 center, float size, ImU32 col);
+bool iconButton(const char* id, Icon icon, bool enabled = true, const char* help = nullptr, bool danger = false);
+// Number box: drag sideways to change (Shift fine, Ctrl coarse), double-click to type.
+bool numField(const char* id, double* v, float w, int decimals, double dragStep, const char* unit = nullptr, bool enabled = true);
+// Dropdown. helps (optional) adds a second line per item; dim (optional) greys items out (legacy, mod-only).
+bool combo(const char* id, int* cur, const char* const* labels, int n, float w, const char* const* helps = nullptr,
+           const bool* dim = nullptr, const char* fallback = nullptr);
+bool smallToggle(const char* id, bool* v, const char* help = nullptr); // 32x16 track, no label
+bool searchBox(const char* id, char* buf, size_t n, const char* hint, float w);
+// Form row label: drawn at the cursor, centred on a ROW_H row; the cursor moves past labelW.
+void formLabel(const char* label, float labelW, const char* help = nullptr);
 
 // Numbers: deltas carry a sign with a space ("+ 6", "− 0.70"), real minus sign
 void fmtNum(char* out, size_t n, double v, int decimals, bool signedDelta);

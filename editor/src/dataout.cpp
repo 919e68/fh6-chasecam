@@ -40,7 +40,8 @@ bool parseDataOut(const uint8_t* d, size_t n, Telemetry& t) {
     t.yaw = rd<float>(d, 56);
     t.pitch = rd<float>(d, 60);
     t.roll = rd<float>(d, 64);
-    rd4(d, 84, t.slipRatio);       // after NormalizedSuspensionTravel (68)
+    rd4(d, 68, t.suspNorm);
+    rd4(d, 84, t.slipRatio);
     rd4(d, 164, t.slipAngle);      // after WheelRotationSpeed, RumbleStrip, Puddle, SurfaceRumble
     rd4(d, 180, t.combinedSlip);
     t.carOrdinal = rd<int32_t>(d, 212);

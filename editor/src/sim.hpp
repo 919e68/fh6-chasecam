@@ -5,6 +5,9 @@
 #pragma once
 #include "core.hpp"
 #include "dataout.hpp"
+#include "layereval.hpp"
+#include <map>
+#include <string>
 #include <cmath>
 #include <deque>
 #include <vector>
@@ -34,7 +37,15 @@ struct Inputs {
     double drift = 0;      // drift angle in radians, + = travelling to the right of the nose (left-hand drift)
     double slip = 0;       // lateral tyre slip like the camera's Slip_Lateral: >1 = sliding, signed like drift
     double latG = 0, lonG = 0; // G, car space (+lat = right, +lon = forward)
+    double slipLon = 0, slipAll = 0;   // rear tyres: wheelspin/lock-up and combined slip
+    double suspLon = 0, suspLat = 0;   // suspension compression front-rear, left-right (-1..1)
+    double vertAcc = 0;                // m/s^2, up
+    double airTime = 0;                // s with no wheel touching
+    bool telemetry = false;            // the extra fields above are real
 };
+
+// The preview's values for the camera layers' inputs.
+void fillInputs(const Inputs& in, InputFrame& f);
 
 double wrapAngle(double a);
 double curveAt(const std::vector<Pt>& c, double x); // piecewise linear, clamped at the ends
@@ -44,7 +55,7 @@ class DemoDrive {
 public:
     Inputs step(double dt);
 private:
-    double t_ = 0, travel_ = 0, drift_ = 0, speed_ = 21;
+    double t_ = 0, travel_ = 0, drift_ = 0, speed_ = 15;
     V3 pos_;
 };
 
@@ -57,18 +68,29 @@ public:
 private:
     bool init_ = false;
     V3 lastPos_;
-    double travel_ = 0;
+    double travel_ = 0, airTime_ = 0;
 };
 
-// Approximate chase camera.
+// Chase camera values from CameraSettings.ini (FollowLowCam / FollowHighCam).
+struct ChaseConfig {
+    int slot = 0;
+    double heightOfs = 0, radiusOfs = 0, targetOfs = 0, hMin = 1.7, hMax = 1.7;
+    double fov = 55, minFov = 40, maxFov = 70;
+    double yK = 8.5, yD = 1.2, yCar = 0.2, yMax = 4.05, hK = 93.5, hD = 3.85, hKAir = 18, hDAir = 1.5;
+};
+ChaseConfig chaseConfig(const std::map<std::string, double>& ini, int slot);
+
+// Approximate chase camera, after FH1's code (same keys): distance behind the
+// car's box, height clamped between the min and max above ground, a yaw spring
+// that trails the car, and the section's effect layers on top.
 struct CamPose { V3 pos, dir, up; double fov = 60; double aimDeg = 0, tiltDeg = 0, fovNow = 0; };
 class CameraSim {
 public:
-    CamPose step(const CamParams& p, const Inputs& in, double dt, bool followTravel);
+    CamPose step(const ChaseConfig& c, const LayerOut& lo, const Inputs& in, double dt, bool followTravel);
     void reset() { init_ = false; }
 private:
     bool init_ = false;
-    double yaw_ = 0, yawV_ = 0, aim_ = 0, aimV_ = 0, roll_ = 0, rollV_ = 0, sfov_ = 0, sfovV_ = 0;
+    double yaw_ = 0, yawV_ = 0, lastWant_ = 0, hY_ = 0, hV_ = 0;
 };
 
 // Skid marks and tyre smoke behind the car.

@@ -22,7 +22,10 @@ while time.time() - t0 < seconds:
     struct.pack_into('<3f', pkt, 20, lat * math.cos(drift), 0, -lat * math.sin(drift))           # accel, car space
     struct.pack_into('<3f', pkt, 32, speed * math.sin(drift), 0, speed * math.cos(drift))       # velocity, car space
     struct.pack_into('<3f', pkt, 56, travel - drift, 0, 0)                                        # yaw, pitch, roll
+    struct.pack_into('<4f', pkt, 68, 0.62, 0.38, 0.58, 0.42)                                      # suspension travel: loaded on the left (outside)
+    struct.pack_into('<4f', pkt, 84, 0.05, 0.05, 0.9, 0.9)                                        # tyre slip ratio: rear wheelspin
     struct.pack_into('<4f', pkt, 164, 0.3, 0.3, -3.8, -3.8)                                       # tyre slip angle
+    struct.pack_into('<4f', pkt, 180, 0.4, 0.4, 3.9, 3.9)                                         # combined slip
     struct.pack_into('<3f', pkt, 244, x, 0, z)                                                    # position
     struct.pack_into('<f', pkt, 256, speed)
     pkt[315] = 200                                                                                # throttle

@@ -16,6 +16,7 @@ struct Telemetry {
     uint32_t timestampMs = 0;
     float accel[3] = {}, vel[3] = {}, angVel[3] = {}; // car space: x right, y up, z forward
     float yaw = 0, pitch = 0, roll = 0;               // radians
+    float suspNorm[4] = {};                           // FL FR RL RR suspension travel 0 (extended) .. 1 (compressed)
     float slipRatio[4] = {}, slipAngle[4] = {}, combinedSlip[4] = {}; // FL FR RL RR; > 1 = grip lost
     int32_t carOrdinal = 0;
     float pos[3] = {};                                // world, metres
