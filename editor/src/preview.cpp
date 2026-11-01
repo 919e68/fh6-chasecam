@@ -182,9 +182,9 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
         if (!ok) continue;
         // semi-transparent white; yellow edges kept light because every edge is
         // shared by two faces and the mesh is dense
-        ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.front ? fc.shade : 0.35f, fc.front ? 120 : 30);
+        ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.front ? fc.shade : 0.35f, fc.front ? 60 : 15);
         dl->AddConvexPolyFilled(q, fc.count, fill);
-        dl->AddPolyline(q, fc.count, rgb(0xFFD43B, fc.front ? 85 : 22), 1.f * S, ImDrawFlags_Closed);
+        dl->AddPolyline(q, fc.count, rgb(0xFFD43B, fc.front ? 50 : 12), 1.f * S, ImDrawFlags_Closed);
     }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
