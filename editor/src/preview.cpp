@@ -1,4 +1,5 @@
 #include "preview.hpp"
+#include "carmesh.hpp"
 #include "theme.hpp"
 #include <algorithm>
 #include <cmath>
@@ -117,9 +118,9 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     };
     drawSmoke(true);
 
-    // car: a see-through white low-poly coupe lofted through cross-sections
-    // along its length, with yellow edge lines. All faces, back to front: the
-    // far side shows faintly through the near side.
+    // car: the generated high-poly coupe (carmesh.cpp), see-through white with
+    // yellow edge lines. All faces back to front, so the far side shows faintly
+    // through the near side.
     V3 fwd(std::sin(in.heading), 0, std::cos(in.heading));
     V3 right(fwd.z, 0, -fwd.x);
     V3 up(0, 1, 0);
@@ -127,85 +128,12 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
     V3 upR = (up * std::cos(rl) - right * std::sin(rl)).norm();
     V3 rightR = upR.cross(fwd).norm(); // x right, y up, z forward
     V3 o = in.pos + V3(0, gy - in.pos.y, 0);
-    auto P = [&](double x, double y, double z) { return o + rightR * x + upR * y + fwd * z; };
+    auto P = [&](const V3& p) { return o + rightR * p.x + upR * p.y + fwd * p.z; };
     const V3 light = V3(-0.35, 1.0, -0.25).norm();
-
-    auto addFace = [&](std::vector<Face>& out, const V3* pts, int n, const V3& inside) {
-        Face f;
-        f.count = n;
-        V3 ctr, nrm;
-        for (int i = 0; i < n; i++) {
-            f.c[i] = pts[i];
-            ctr = ctr + pts[i] * (1.0 / n);
-            const V3 &p0 = pts[i], &p1 = pts[(i + 1) % n]; // Newell normal
-            nrm = nrm + V3((p0.y - p1.y) * (p0.z + p1.z), (p0.z - p1.z) * (p0.x + p1.x), (p0.x - p1.x) * (p0.y + p1.y));
-        }
-        if (nrm.len() < 1e-9) return;
-        nrm = nrm.norm();
-        if (nrm.dot(ctr - inside) < 0) nrm = nrm * -1.0; // outward
-        f.front = nrm.dot(v.pos - ctr) > 0;              // back faces stay: the shell is see-through
-        f.n = nrm;
-        f.shade = (float)std::clamp(0.30 + 0.70 * std::max(0.0, nrm.dot(light)), 0.0, 1.0);
-        f.depth = v.toCam(ctr).z;
-        out.push_back(f);
-    };
-
-    // cross-sections, rear to front: z, then heights (bottom, widest, belt, top)
-    // and half widths at those heights. Belt to top is the glass over the cabin.
-    struct Sec { double z, yb, ys, ybelt, ytop, wb, ws, wbelt, wtop; };
-    static const Sec SECS[] = {
-        { -2.25, 0.25, 0.48, 0.70, 0.74, 0.76, 0.85, 0.83, 0.70 }, // rear bumper
-        { -2.07, 0.19, 0.50, 0.80, 0.85, 0.84, 0.92, 0.90, 0.78 }, // trunk lip
-        { -1.45, 0.18, 0.50, 0.82, 0.88, 0.85, 0.93, 0.90, 0.74 }, // base of the rear window
-        { -0.70, 0.18, 0.50, 0.84, 1.27, 0.85, 0.93, 0.88, 0.60 }, // roof, rear
-        { 0.35, 0.18, 0.50, 0.84, 1.29, 0.85, 0.93, 0.88, 0.60 },  // roof, front
-        { 1.05, 0.18, 0.50, 0.81, 0.87, 0.85, 0.93, 0.89, 0.74 },  // base of the windshield
-        { 2.02, 0.20, 0.47, 0.69, 0.74, 0.82, 0.90, 0.86, 0.72 },  // nose
-        { 2.25, 0.27, 0.45, 0.59, 0.62, 0.72, 0.81, 0.79, 0.65 },  // front bumper
-    };
-    const int NS = (int)(sizeof SECS / sizeof SECS[0]);
-    auto ring = [&](const Sec& c, V3* r) {
-        r[0] = P(c.wb, c.yb, c.z);       r[1] = P(c.ws, c.ys, c.z);
-        r[2] = P(c.wbelt, c.ybelt, c.z); r[3] = P(c.wtop, c.ytop, c.z);
-        r[4] = P(-c.wtop, c.ytop, c.z);  r[5] = P(-c.wbelt, c.ybelt, c.z);
-        r[6] = P(-c.ws, c.ys, c.z);      r[7] = P(-c.wb, c.yb, c.z);
-    };
-    std::vector<Face> wheels, body;
-    V3 rings[16][8];
-    for (int i = 0; i < NS; i++) ring(SECS[i], rings[i]);
-    for (int i = 0; i + 1 < NS; i++) {
-        V3 inside = P(0, 0.55, (SECS[i].z + SECS[i + 1].z) / 2);
-        for (int k = 0; k < 8; k++) {
-            V3 q[4] = { rings[i][k], rings[i][(k + 1) % 8], rings[i + 1][(k + 1) % 8], rings[i + 1][k] };
-            addFace(body, q, 4, inside);
-        }
-    }
-    V3 center = P(0, 0.55, 0);
-    addFace(body, rings[0], 8, center);
-    addFace(body, rings[NS - 1], 8, center);
-    // wheels: octagonal, the outer face just inside the body side
-    for (int sx = -1; sx <= 1; sx += 2)
-        for (int sz = -1; sz <= 1; sz += 2) {
-            const double r = 0.33, cx = sx * 0.80, cz = sz * 1.38, hw = 0.12;
-            V3 in8[8], out8[8];
-            for (int k = 0; k < 8; k++) {
-                double t = (k + 0.5) * 3.14159265 / 4;
-                double yy = r + r * std::cos(t), zz = cz + r * std::sin(t);
-                in8[k] = P(cx - hw, yy, zz);
-                out8[k] = P(cx + hw, yy, zz);
-            }
-            V3 wc = P(cx, r, cz);
-            for (int k = 0; k < 8; k++) {
-                V3 q[4] = { in8[k], in8[(k + 1) % 8], out8[(k + 1) % 8], out8[k] };
-                addFace(wheels, q, 4, wc);
-            }
-            addFace(wheels, in8, 8, wc);
-            addFace(wheels, out8, 8, wc);
-        }
 
     // soft contact shadow on the ground
     {
-        auto ground = [&](double x, double z) { V3 g = P(x, 0, z); g.y = gy; return g; };
+        auto ground = [&](double x, double z) { V3 g = P(V3(x, 0, z)); g.y = gy; return g; };
         for (int pass = 0; pass < 2; pass++) {
             double ex = pass ? 1.15 : 0.98, ez = pass ? 2.55 : 2.35;
             V3 c4[4] = { ground(-ex, -ez), ground(ex, -ez), ground(ex, ez), ground(-ex, ez) };
@@ -216,21 +144,48 @@ void drawPreview(ImDrawList* dl, ImVec2 a, ImVec2 b, ImVec2 fa, ImVec2 fb, const
         }
     }
 
-    std::vector<Face> faces(wheels);
-    faces.insert(faces.end(), body.begin(), body.end());
+    const fh6::CarMesh& mesh = fh6::carMesh();
+    static std::vector<V3> world, camv;
+    static std::vector<Face> faces;
+    world.resize(mesh.verts.size());
+    camv.resize(mesh.verts.size());
+    for (size_t i = 0; i < mesh.verts.size(); i++) { world[i] = P(mesh.verts[i]); camv[i] = v.toCam(world[i]); }
+    faces.clear();
+    for (size_t fi = 0; fi < mesh.faces.size(); fi++) {
+        const auto& mf = mesh.faces[fi];
+        Face f;
+        f.count = mf.n;
+        V3 ctr, nrm;
+        for (int i = 0; i < mf.n; i++) {
+            const V3& p0 = world[mf.idx[i]];
+            const V3& p1 = world[mf.idx[(i + 1) % mf.n]];
+            f.c[i] = camv[mf.idx[i]]; // camera space
+            ctr = ctr + p0 * (1.0 / mf.n);
+            nrm = nrm + V3((p0.y - p1.y) * (p0.z + p1.z), (p0.z - p1.z) * (p0.x + p1.x), (p0.x - p1.x) * (p0.y + p1.y)); // Newell
+        }
+        if (nrm.len() < 1e-12) continue;
+        nrm = nrm.norm();
+        if (nrm.dot(ctr - P(mesh.inside[fi])) < 0) nrm = nrm * -1.0; // outward
+        f.front = nrm.dot(v.pos - ctr) > 0;
+        f.n = nrm;
+        f.shade = (float)std::clamp(0.30 + 0.70 * std::max(0.0, nrm.dot(light)), 0.0, 1.0);
+        f.depth = v.toCam(ctr).z;
+        faces.push_back(f);
+    }
     std::sort(faces.begin(), faces.end(), [](const Face& x, const Face& y) { return x.depth > y.depth; });
     for (auto& fc : faces) {
         ImVec2 q[8];
         bool ok = true;
         for (int i = 0; i < fc.count; i++) {
-            V3 c = v.toCam(fc.c[i]);
-            if (c.z < v.nearZ) { ok = false; break; }
-            q[i] = v.project(c);
+            if (fc.c[i].z < v.nearZ) { ok = false; break; }
+            q[i] = v.project(fc.c[i]);
         }
         if (!ok) continue;
-        ImU32 shade = mix(0x5E646E, 0xF6F7F9, fc.front ? fc.shade : 0.35f, fc.front ? 115 : 45); // semi-transparent white
-        dl->AddConvexPolyFilled(q, fc.count, shade);
-        dl->AddPolyline(q, fc.count, rgb(0xFFD43B, fc.front ? 215 : 90), 1.f * S, ImDrawFlags_Closed); // yellow edges
+        // semi-transparent white; yellow edges kept light because every edge is
+        // shared by two faces and the mesh is dense
+        ImU32 fill = mix(0x5E646E, 0xF6F7F9, fc.front ? fc.shade : 0.35f, fc.front ? 120 : 30);
+        dl->AddConvexPolyFilled(q, fc.count, fill);
+        dl->AddPolyline(q, fc.count, rgb(0xFFD43B, fc.front ? 85 : 22), 1.f * S, ImDrawFlags_Closed);
     }
     drawSmoke(false);
     // outside the game's 16:9 frame: dimmed, with a thin frame edge
