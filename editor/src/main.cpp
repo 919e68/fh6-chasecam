@@ -142,6 +142,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     RegisterClassExW(&wc);
     gHwnd = CreateWindowW(wc.lpszClassName, APP_TITLE, WS_OVERLAPPEDWINDOW, 100, 100, (int)(winW * scale), (int)(winH * scale),
                           nullptr, nullptr, wc.hInstance, nullptr);
+#ifdef FOVTEST
+    SetWindowPos(gHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE); // stays over the game (windowed or borderless)
+#endif
     BOOL dark = TRUE; // dark title bar (Windows 10 2004+ / 11)
     DwmSetWindowAttribute(gHwnd, 20, &dark, sizeof dark);
     COLORREF cap = RGB(0x16, 0x18, 0x1D);
