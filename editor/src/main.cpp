@@ -1,5 +1,15 @@
 // FH6 ChaseCam editor: Win32 + Direct3D 11 + Dear ImGui.
+#ifdef FOVTEST
+#include "fovtest.hpp"
+using MainApp = FovTest;
+static const wchar_t* APP_TITLE = L"FH6 FOV Live Test";
+static const int DEF_W = 760, DEF_H = 580, MIN_W = 640, MIN_H = 560;
+#else
 #include "app.hpp"
+using MainApp = App;
+static const wchar_t* APP_TITLE = L"Forza Horizon Camera Editor";
+static const int DEF_W = 1120, DEF_H = 690, MIN_W = 900, MIN_H = 580;
+#endif
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
@@ -106,8 +116,8 @@ static LRESULT WINAPI wndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     case WM_GETMINMAXINFO: {
         float s = ImGui_ImplWin32_GetDpiScaleForHwnd(h);
         MINMAXINFO* m = (MINMAXINFO*)l;
-        m->ptMinTrackSize.x = (LONG)(900 * s);
-        m->ptMinTrackSize.y = (LONG)(580 * s);
+        m->ptMinTrackSize.x = (LONG)(MIN_W * s);
+        m->ptMinTrackSize.y = (LONG)(MIN_H * s);
         return 0;
     }
     case WM_SYSCOMMAND:
@@ -124,13 +134,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     ImGui_ImplWin32_EnableDpiAwareness();
     float scale = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
-    int winW = 1120, winH = 690; // optional: --size 1400x900
+    int winW = DEF_W, winH = DEF_H; // optional: --size 1400x900
     if (const wchar_t* s = cmd ? wcsstr(cmd, L"--size ") : nullptr) swscanf(s + 7, L"%dx%d", &winW, &winH);
 
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, wndProc, 0, 0, inst, LoadIconW(inst, L"APPICON"), LoadCursor(nullptr, IDC_ARROW),
                        nullptr, nullptr, L"FH6ChaseCam", nullptr };
     RegisterClassExW(&wc);
-    gHwnd = CreateWindowW(wc.lpszClassName, L"Forza Horizon Camera Editor", WS_OVERLAPPEDWINDOW, 100, 100, (int)(winW * scale), (int)(winH * scale),
+    gHwnd = CreateWindowW(wc.lpszClassName, APP_TITLE, WS_OVERLAPPEDWINDOW, 100, 100, (int)(winW * scale), (int)(winH * scale),
                           nullptr, nullptr, wc.hInstance, nullptr);
     BOOL dark = TRUE; // dark title bar (Windows 10 2004+ / 11)
     DwmSetWindowAttribute(gHwnd, 20, &dark, sizeof dark);
@@ -139,7 +149,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     if (!createDevice(gHwnd)) {
         destroyDevice();
-        MessageBoxW(nullptr, L"Direct3D 11 isn't available on this PC.", L"Forza Horizon Camera Editor", MB_ICONERROR);
+        MessageBoxW(nullptr, L"Direct3D 11 isn't available on this PC.", APP_TITLE, MB_ICONERROR);
         return 1;
     }
     ShowWindow(gHwnd, SW_SHOWDEFAULT);
@@ -155,7 +165,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     ImGui_ImplWin32_Init(gHwnd);
     ImGui_ImplDX11_Init(gDev, gCtx);
 
-    App app;
+    MainApp app;
     app.init();
     const float clear[4] = { 0x16 / 255.f, 0x18 / 255.f, 0x1D / 255.f, 1 };
     bool done = false;

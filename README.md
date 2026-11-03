@@ -43,6 +43,10 @@ Setup:
 
 Settings are kept in `fh6chasecam-editor.ini` and your edits in `fh6chasecam-edits.txt`, both next to the exe.
 
+### FOV live test
+
+`FH6FovTest.exe` is a small separate tool to find out whether FH6 picks up camera file changes without a restart. Put it next to `FH6ChaseCam.exe`. Each time you move its slider it writes a FOV change into the game's camera files (as an always-on FOV layer on both chase cameras, in the settings file, or both). It backs up the camera files first and puts them back when you close it. Build it with `sh editor/build.sh fovtest`.
+
 ### Build the editor
 
 ```sh
