@@ -12,7 +12,7 @@
 #include <sstream>
 
 using namespace ui;
-static const char* VERSION = "0.1.0";
+static const char* VERSION = "0.2.0";
 static const double PI = 3.14159265358979323846;
 
 // ---------------------------------------------------------------------------
@@ -173,14 +173,22 @@ void App::findStock() {
             break;
         }
     }
-    if (stockDir.empty()) stockNote = "The game's own camera files weren't found in this folder. Choose the folder that has them.";
+    // FH6 keeps its own camera files packed, so fall back to other loose camera files to build on
+    auto hasPair = [&](const fs::path& d) { return fs::exists(d / "CameraPhysics.xml", ec) && fs::exists(d / "CameraSettings.ini", ec); };
+    fs::path bak = outDir() / "fh6chasecam-backup";
+    if (stockDir.empty() && hasPair(bak)) stockDir = bak;                                         // what was there before our first save
+    if (stockDir.empty() && !fs::exists(bak, ec) && hasPair(outDir())) stockDir = outDir();      // another camera mod, not ours yet
+    if (stockDir.empty() && hasPair(exeDir() / "camera-base")) stockDir = exeDir() / "camera-base"; // shipped with the editor
+    if (stockDir.empty()) stockNote = "No camera files to build on were found. Choose a folder that has CameraPhysics.xml and CameraSettings.ini.";
 }
 
 bool App::stockOk() const {
     std::error_code ec;
     if (stockDir.empty()) return false;
     if (!fs::exists(stockDir / "CameraPhysics.xml", ec) || !fs::exists(stockDir / "CameraSettings.ini", ec)) return false;
-    return !(fs::exists(outDir(), ec) && fs::equivalent(stockDir, outDir(), ec)); // never build from our own output
+    // the output folder only counts while it still holds another mod's files (before our first save backs them up)
+    if (fs::exists(outDir(), ec) && fs::equivalent(stockDir, outDir(), ec)) return !fs::exists(outDir() / "fh6chasecam-backup", ec);
+    return true;
 }
 
 bool App::hasBackup() const {
@@ -211,6 +219,7 @@ void App::saveToGame() {
             if (fs::exists(out / n, ec)) fs::copy_file(out / n, bak / n, fs::copy_options::overwrite_existing, ec);
         writePath(bak / "README.txt", "Forza Horizon Camera Editor keeps the camera files that were here before its first save.\r\n"
                                       "Undo save in the editor puts them back. Empty means there were none.\r\n");
+        if (fs::equivalent(stockDir, out, ec)) stockDir = bak; // keep building on the other mod's files, not on ours
     }
     if (!writePath(out / "CameraSettings.ini", b.ini) || !writePath(out / "CameraPhysics.xml", b.xml)) {
         say("Error", "Couldn't write to " + u8(out) + ". Check the folder isn't read-only.", DANGER);
@@ -231,6 +240,10 @@ void App::undoSave() {
     fs::remove(bak / "CameraPhysics.xml", ec);
     fs::remove(bak / "README.txt", ec);
     fs::remove(bak, ec);
+    stockDir.clear();
+    findStock();
+    loadBase();
+    checkSaved();
     dirty = true;
     say("Undone", "Camera files are back to how they were before your first save. Restart FH6 to load them.", COOL);
 }
@@ -615,7 +628,7 @@ void App::footer(float w, float h) {
     float pw = buttonWidth("Save to game", Btn::Primary, false, "CTRL+S"), uw = buttonWidth("Undo save", Btn::Secondary);
     ImGui::SetCursorScreenPos(ImVec2(p0.x + w - g - pw, cy - 20 * S));
     std::string tip = std::string("Writes both camera files into mediapc\\camera in the game folder: the game's own with your edits, "
-                                  "and the drift setup on ") + fh6::SLOTS[p.slot ? 1 : 0].name + ". Restart FH6 to load them.";
+                                  "and the drift setup on ") + fh6::SLOTS[p.slot ? 1 : 0].name + ". Restart FH6 to load them.\n\nBuilt on: " + u8(stockDir);
     bool canSave = stockOk() && baseReal && buildError.empty();
     if (button("Save to game", Btn::Primary, false, pw, canSave, "CTRL+S")) saveToGame();
     helpTooltip(tip.c_str());

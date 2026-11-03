@@ -38,7 +38,7 @@ How it fits together:
 
 Setup:
 
-1. Choose your FH6 folder (the one with `forzahorizon6.exe`, or the Xbox app's `Content` folder). The editor finds the game's own camera files in it. Until then the pages show typical values and layers can't be edited.
+1. Choose your FH6 folder (the one with `forzahorizon6.exe`, or the Xbox app's `Content` folder). FH6 keeps its own camera files packed, so the editor builds on loose camera files: ones found in the game folder, then the camera files that were in `mediapc\camera` before its first save (another camera mod), then a `camera-base` folder next to the exe. Until it finds some, the pages show typical values and layers can't be edited.
 2. In FH6: Settings > HUD and Gameplay > Data Out **On**, IP `127.0.0.1`, port `5607` (or the port set in the editor; ports 5200 to 5300 are taken by the game).
 
 Settings are kept in `fh6chasecam-editor.ini` and your edits in `fh6chasecam-edits.txt`, both next to the exe.
