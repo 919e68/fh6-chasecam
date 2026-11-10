@@ -58,6 +58,10 @@ bool isWs(char c);
 std::string appendLayers(const std::string& text, const std::string& section,
                          const std::vector<std::string>& layers);
 
+// Drift setup that changes nothing (after loading a camera, or resetting one).
+CamParams noChangeParams(int slot);
+bool isNoChange(const CamParams& p);
+
 // The effect layers the drift setup adds to its chase camera.
 std::vector<std::string> quickLayers(const CamParams& p);
 

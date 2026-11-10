@@ -42,11 +42,14 @@ struct CameraGroup {
     const char* name;   // "Chase Near"
     const char* blurb;  // one line under the title
     int slot;           // 0/1 = chase near/far (preview follows it), -1 = none
+    const char* section; // its CameraPhysics.xml section, nullptr = none
     std::vector<KeyInfo> keys;
 };
 
 const std::vector<CameraGroup>& cameraGroups();
 const KeyInfo* findKey(const std::string& full);
+int groupOfKey(const std::string& key);         // camera group a key belongs to (unknown keys: by first path segment)
+int groupOfSection(const std::string& section); // camera group of an effect-layer section, -1 if none
 std::string builtinIni(); // every listed key at its default, in the game's order
 
 // ---------------------------------------------------------------------------

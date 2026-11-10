@@ -18,18 +18,7 @@ static const double PI = 3.14159265358979323846;
 
 // ---------------------------------------------------------------------------
 // helpers
-static int groupOfKey(const std::string& key) {
-    auto& gs = fh6::cameraGroups();
-    for (size_t i = 0; i < gs.size(); i++)
-        for (auto& k : gs[i].keys)
-            if (k.key == key) return (int)i;
-    // unknown key: the group whose keys share its first path segment
-    std::string seg = key.substr(0, key.find('\\'));
-    for (size_t i = 0; i < gs.size(); i++)
-        for (auto& k : gs[i].keys)
-            if (k.key.compare(0, seg.size() + 1, seg + "\\") == 0) return (int)i;
-    return (int)gs.size() - 1;
-}
+using fh6::groupOfKey;
 
 static std::string springText(double k, double zeta) {
     char b[160];
@@ -112,8 +101,11 @@ void App::settingsNav(float w, float h) {
     ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
     panel(dl, a, b, false);
     auto& gs = fh6::cameraGroups();
-    std::vector<int> counts(gs.size(), 0);
-    for (auto& kv : edits.ini) counts[groupOfKey(kv.first)]++;
+    std::vector<int> counts(gs.size(), 0); // changed settings, plus 1 for changed effect layers
+    for (size_t i = 0; i < gs.size(); i++) {
+        fh6::CameraChanges c = fh6::cameraChanges(edits, (int)i);
+        counts[i] = c.keys + (c.layers ? 1 : 0);
+    }
     float y = a.y + SP3 * S, rh = 34 * S;
     for (size_t i = 0; i < gs.size(); i++) {
         ImVec2 r0(a.x + 1 * S, y), r1(b.x - 1 * S, y + rh);
@@ -137,7 +129,7 @@ void App::settingsNav(float w, float h) {
     float ty = std::max(y + SP4 * S, b.y - 96 * S);
     ImGui::SetCursorScreenPos(ImVec2(a.x + SP4 * S, ty));
     textWrapped(Caption, INK_MUTED,
-                baseReal ? "Orange numbers: settings you changed. Saved into the game with Save to game."
+                baseReal ? "Orange numbers: changes on that camera (settings, plus 1 for its effect layers). Reset camera puts it back."
                          : "No game camera files yet, so these are typical values. Choose your FH6 folder to edit the game's own.",
                 w - 2 * SP4 * S);
 }
@@ -149,16 +141,49 @@ void App::settingsKeys(float w, float h) {
     const fh6::CameraGroup& G = fh6::cameraGroups()[setCam];
     float pad = SP4 * S;
     drawText(dl, ImVec2(a.x + pad, a.y + pad - 2 * S), Title, INK, G.name);
-    // reset this camera
-    bool any = false;
-    for (auto& kv : edits.ini) if (groupOfKey(kv.first) == setCam) { any = true; break; }
+    // reset this camera: its settings, its effect layers, and the drift setup when it's on this camera
+    fh6::CameraChanges cc = fh6::cameraChanges(edits, setCam);
+    bool driftHere = G.slot >= 0 && (p.slot ? 1 : 0) == G.slot && !fh6::isNoChange(p);
+    bool any = cc.keys || cc.layers || driftHere;
     float rw = buttonWidth("Reset camera", Btn::Ghost);
-    ImGui::SetCursorScreenPos(ImVec2(b.x - pad - rw + SP3 * S, a.y + pad - 12 * S));
-    if (button("Reset camera", Btn::Ghost, false, rw, any)) {
-        for (auto it = edits.ini.begin(); it != edits.ini.end();) it = groupOfKey(it->first) == setCam ? edits.ini.erase(it) : std::next(it);
-        editsChanged();
+    ImVec2 rp(b.x - pad - rw + SP3 * S, a.y + pad - 12 * S);
+    ImGui::SetCursorScreenPos(rp);
+    if (button("Reset camera", Btn::Ghost, false, rw, any)) { resetDrift = true; ImGui::OpenPopup("##resetcam"); }
+    helpTooltip("Puts this camera back to the camera you loaded: its settings, its effect layers and the drift setup on it.");
+    ImGui::SetNextWindowPos(ImVec2(rp.x + rw, rp.y + 40 * S + SP1 * S), ImGuiCond_Always, ImVec2(1, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(SP4 * S, SP4 * S));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(SP2 * S, SP2 * S));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(LINE_STRONG));
+    if (ImGui::BeginPopup("##resetcam")) {
+        float pw = 320 * S;
+        std::string head = std::string("Reset ") + G.name + "?";
+        text(Nav, INK, head.c_str());
+        textWrapped(Caption, INK_MUTED, ("Back to the loaded camera (" + baseLabel() + "). This resets:").c_str(), pw);
+        auto bullet = [&](const std::string& t) {
+            ImVec2 q = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(q.x, q.y + 8 * S), ImVec2(q.x + 4 * S, q.y + 12 * S), rgb(ORANGE));
+            ImGui::SetCursorScreenPos(ImVec2(q.x + 14 * S, q.y));
+            textWrapped(Body, INK, t.c_str(), pw - 14 * S);
+        };
+        if (cc.keys) bullet(std::to_string(cc.keys) + (cc.keys == 1 ? " changed setting" : " changed settings"));
+        if (cc.layers) bullet(std::string("Its effect layers (") + G.section + ")");
+        if (driftHere) toggle("resetdrift", "The drift setup too", &resetDrift, "The drift setup is on this camera. On: after the reset it changes nothing.");
+        ImGui::Dummy(ImVec2(pw, SP1 * S));
+        if (button("Reset", Btn::Danger)) {
+            fh6::resetCamera(edits, setCam);
+            if (driftHere && resetDrift) p = fh6::noChangeParams(p.slot);
+            workFor.clear();
+            selKey.clear();
+            editsChanged();
+            say("Reset", std::string(G.name) + " is back to the loaded camera.", COOL);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine(0, SP3 * S);
+        if (button("Cancel", Btn::Ghost)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
     }
-    helpTooltip("Puts every setting of this camera back to the game's value.");
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
     ImGui::SetCursorScreenPos(ImVec2(a.x + pad, a.y + pad + 22 * S));
     textWrapped(Caption, INK_MUTED, G.blurb, w - 2 * pad);
     float top = pad + 22 * S + 24 * S;
@@ -727,15 +752,15 @@ void App::layerList(float w, float h) {
     }
     // reset section
     bool changedSec = edits.sections.count(sec) > 0;
-    float rw2 = buttonWidth("Reset section", Btn::Ghost);
+    float rw2 = buttonWidth("Reset layers", Btn::Ghost);
     ImGui::SetCursorScreenPos(ImVec2(b.x - pad - rw2 + SP3 * S, ty - 6 * S));
-    if (button("Reset section", Btn::Ghost, false, rw2, changedSec)) {
+    if (button("Reset layers", Btn::Ghost, false, rw2, changedSec)) {
         edits.sections.erase(sec);
         workFor.clear();
         syncWork();
         editsChanged();
     }
-    helpTooltip("Puts this section back to the game's layers.");
+    helpTooltip("Puts this camera's effect layers back to the loaded camera's. Its settings stay: Reset camera on the Camera settings page resets both.");
 }
 
 // Curve editor: the response curve with draggable points, the mirrored half

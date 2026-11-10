@@ -65,6 +65,7 @@ private:
 
     // camera settings page
     int setCam = 0;
+    bool resetDrift = true;  // camera reset also sets the drift setup to no change
     std::string selKey;
     // effect layers page
     int laySec = 0, laySel = -1, layScrollTo = -1;

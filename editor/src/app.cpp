@@ -210,15 +210,6 @@ static fs::path findPair(const fs::path& dir) {
     return fs::path();
 }
 
-static fh6::CamParams noChange(int slot) {
-    fh6::CamParams q;
-    q.slot = slot;
-    q.heightOfs = q.targetOfs = q.radiusOfs = q.fovAdd = q.maxFovAdd = 0;
-    q.follow = 1;
-    q.cornerAim = q.driftTilt = q.speedFov = 0;
-    return q;
-}
-
 void App::loadCamera(const fs::path& dir, const std::string& label) {
     fs::path src = findPair(dir);
     if (src.empty()) { say("Error", "No CameraPhysics.xml and CameraSettings.ini in " + u8(dir) + ".", DANGER); return; }
@@ -245,7 +236,7 @@ void App::loadCamera(const fs::path& dir, const std::string& label) {
     // start fresh: your changes are kept in a backup file, and the drift setup adds nothing
     if (!edits.empty()) writePath(exeDir() / "fh6chasecam-edits.bak.txt", fh6::writeEdits(edits));
     edits = fh6::Edits();
-    p = noChange(p.slot);
+    p = fh6::noChangeParams(p.slot);
     stockDir = dst;
     stockNote.clear();
     workFor.clear();

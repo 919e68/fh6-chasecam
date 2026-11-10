@@ -385,6 +385,20 @@ bool readEdits(const std::string& text, Edits& e) {
     return ok;
 }
 
+CameraChanges cameraChanges(const Edits& e, int group) {
+    CameraChanges c;
+    for (auto& kv : e.ini) if (groupOfKey(kv.first) == group) c.keys++;
+    const char* sec = group >= 0 && group < (int)cameraGroups().size() ? cameraGroups()[group].section : nullptr;
+    c.layers = sec && e.sections.count(sec);
+    return c;
+}
+
+void resetCamera(Edits& e, int group) {
+    for (auto it = e.ini.begin(); it != e.ini.end();) it = groupOfKey(it->first) == group ? e.ini.erase(it) : std::next(it);
+    const char* sec = group >= 0 && group < (int)cameraGroups().size() ? cameraGroups()[group].section : nullptr;
+    if (sec) e.sections.erase(sec);
+}
+
 void applyEdits(const std::string& ini, const std::string& xml, const Edits& e, std::string& oi, std::string& ox) {
     oi = ini;
     for (auto& kv : e.ini) oi = iniSet(oi, kv.first, kv.second);

@@ -172,6 +172,46 @@ int main(int argc, char** argv) {
     int dup = 0;
     for (auto& g : cameraGroups()) for (auto& k : g.keys) for (auto& g2 : cameraGroups()) for (auto& k2 : g2.keys) if (&k != &k2 && k.key == k2.key) dup++;
     check(dup == 0, "unique keys");
+    // camera reset: only that camera's settings and layers go back, and the result equals the loaded files
+    {
+        int nearG = -1, farG = -1, hoodG = -1;
+        for (size_t i = 0; i < cameraGroups().size(); i++) {
+            std::string n = cameraGroups()[i].name;
+            if (n == "Chase Near") nearG = (int)i;
+            if (n == "Chase Far") farG = (int)i;
+            if (n == "Hood") hoodG = (int)i;
+        }
+        check(groupOfKey("FollowHighCam\\Spring\\YRotSpringK") == farG && groupOfKey("FollowHighCam\\Spring\\NotAKey") == farG &&
+                  groupOfKey("HoodCam\\FOV") == hoodG && groupOfSection("FollowCam2") == farG && groupOfSection("Copter") == -1,
+              "key and section lookup");
+        std::string bi = builtinIni(), bx = "<CameraPhysics>\n  <FollowCam NumLayers=\"1\">\n  " + lt + "\n  </FollowCam>\n  <FollowCam2 NumLayers=\"1\">\n  " + lt +
+                                              "\n  </FollowCam2>\n</CameraPhysics>\n";
+        Edits ed;
+        ed.ini["FollowHighCam\\FOV"] = "70";
+        ed.ini["FollowHighCam\\Spring\\YRotSpringK"] = "5";
+        ed.ini["FollowLowCam\\FOV"] = "50";
+        ed.ini["HoodCam\\FOV"] = "80";
+        ed.sections["FollowCam2"] = {};
+        ed.sections["FollowCam"] = { lt, lt };
+        CameraChanges cf = cameraChanges(ed, farG);
+        check(cf.keys == 2 && cf.layers, "changes on Chase Far");
+        resetCamera(ed, farG);
+        check(ed.ini.size() == 2 && ed.ini.count("FollowLowCam\\FOV") && ed.ini.count("HoodCam\\FOV") && ed.sections.size() == 1 &&
+                  ed.sections.count("FollowCam"),
+              "reset leaves other cameras");
+        Built rb = buildAll(bi, bx, ed, noChangeParams(1));
+        auto far = [](const std::string& t) {
+            std::string o;
+            for (auto& e : iniEntries(t)) if (e.key.rfind("FollowHighCam", 0) == 0) o += e.key + " " + e.value + "\n";
+            return o;
+        };
+        check(far(rb.ini) == far(bi), "Chase Far settings back to the loaded file");
+        check(findSection(xmlSections(rb.xml), "FollowCam2")->layers == findSection(xmlSections(bx), "FollowCam2")->layers, "Chase Far layers back");
+        check(findSection(xmlSections(rb.xml), "FollowCam")->layers.size() == 2, "Chase Near layers still edited");
+        check(isNoChange(noChangeParams(1)) && !isNoChange(CamParams()), "no-change drift setup");
+        Built nb = buildAll(bi, bx, Edits(), noChangeParams(1));
+        check(nb.ini == bi && nb.xml == bx, "no edits and no drift setup = the loaded files, byte for byte");
+    }
     std::printf("core unit tests OK\n");
     if (argc == 3) refTests(argv[2]);
     return 0;

@@ -123,8 +123,8 @@ std::vector<KeyInfo> chaseKeys(const std::string& p, bool high) {
 
 std::vector<CameraGroup> makeGroups() {
     std::vector<CameraGroup> g;
-    g.push_back({ "Chase Near", "The low, close chase camera. Its effect layers are the FollowCam section.", 0, chaseKeys("FollowLowCam", false) });
-    g.push_back({ "Chase Far", "The higher, further chase camera. Its effect layers are the FollowCam2 section.", 1, chaseKeys("FollowHighCam", true) });
+    g.push_back({ "Chase Near", "The low, close chase camera. Its effect layers are the FollowCam section.", 0, "FollowCam", chaseKeys("FollowLowCam", false) });
+    g.push_back({ "Chase Far", "The higher, further chase camera. Its effect layers are the FollowCam2 section.", 1, "FollowCam2", chaseKeys("FollowHighCam", true) });
     {
         std::vector<KeyInfo> v;
         Builder K{ v, "Driver\\", "Lens" };
@@ -148,7 +148,7 @@ std::vector<CameraGroup> makeGroups() {
         K.group = "Clipping";
         K("CamNearClip", "Near clip", " m", 0.01, 0.3, 0.005, 3, Conf::Med, "Kept low so the dashboard isn't cut.", 0.1);
         K("CamFarClip", "Far clip", " m", 1000, 100000, 100, 0, Conf::High, "Draw distance.", 50000);
-        g.push_back({ "Cockpit", "Both first-person driver views. Effect layers: DriverCam.", -1, v });
+        g.push_back({ "Cockpit", "Both first-person driver views. Effect layers: DriverCam.", -1, "DriverCam", v });
     }
     {
         std::vector<KeyInfo> v;
@@ -168,7 +168,7 @@ std::vector<CameraGroup> makeGroups() {
         K("AutoGhostIntersectionAlphaDistance", "See-through distance", " m", 0, 10, 0.1, 1, Conf::Med, "Objects closer than this turn see-through.", 2.5);
         K.group = "Not in the game's file (untested)";
         K("CamFarClip", "Far clip", " m", 1000, 100000, 100, 0, Conf::Low, "Draw distance. Not in FH6's file for this camera.", 50000, 0, "", false);
-        g.push_back({ "Hood", "The view from the bonnet. Effect layers: Hood.", -1, v });
+        g.push_back({ "Hood", "The view from the bonnet. Effect layers: Hood.", -1, "Hood", v });
     }
     {
         std::vector<KeyInfo> v;
@@ -187,7 +187,7 @@ std::vector<CameraGroup> makeGroups() {
         K("AutoGhostIntersectionAlphaDistance", "See-through distance", " m", 0, 10, 0.1, 1, Conf::Med, "Objects closer than this turn see-through.", 2.5);
         K.group = "Not in the game's file (untested)";
         K("CamFarClip", "Far clip", " m", 1000, 100000, 100, 0, Conf::Low, "Draw distance. Not in FH6's file for this camera.", 50000, 0, "", false);
-        g.push_back({ "Bumper", "The low view from the front bumper. Effect layers: BumperHigh.", -1, v });
+        g.push_back({ "Bumper", "The low view from the front bumper. Effect layers: BumperHigh.", -1, "BumperHigh", v });
     }
     {
         std::vector<KeyInfo> v;
@@ -207,7 +207,7 @@ std::vector<CameraGroup> makeGroups() {
         K("CollisionPullbackNormalExtension", "Collision push-out", " m", 0, 0.1, 0.001, 3, Conf::Med, "Extra push away from a hit surface.", 0.001);
         K("CarBoundingBoxHorizontalExpansion", "Car padding, sides", " m", 0, 3, 0.05, 2, Conf::Med, "Space around the car the camera can't enter.", 0.5);
         K("CarBoundingBoxVerticalExpansion", "Car padding, top", " m", 0, 3, 0.05, 2, Conf::Med, "Space above the car the camera can't enter.", 0.5);
-        g.push_back({ "Photo mode", "The orbit camera in photo mode. No effect layers.", -1, v });
+        g.push_back({ "Photo mode", "The orbit camera in photo mode. No effect layers.", -1, nullptr, v });
     }
     {
         std::vector<KeyInfo> v;
@@ -229,7 +229,7 @@ std::vector<CameraGroup> makeGroups() {
         K("MaxFOV", "Widest field of view", DEG, 1, 179, 0.5, 1, Conf::Med, "Free camera wide limit.", 90, K_FOV);
         K("AutoGhostIntersectionAlpha", "See-through opacity", "", 0, 1, 0.01, 2, Conf::Med, "How visible objects the camera enters stay.", 0);
         K("AutoGhostIntersectionAlphaDistance", "See-through distance", " m", 0, 10, 0.1, 1, Conf::Med, "Objects closer than this turn see-through.", 2.5);
-        g.push_back({ "Free cam", "The free-flying camera in photo mode and replays.", -1, v });
+        g.push_back({ "Free cam", "The free-flying camera in photo mode and replays.", -1, nullptr, v });
     }
     {
         std::vector<KeyInfo> v;
@@ -265,7 +265,7 @@ std::vector<CameraGroup> makeGroups() {
         K("WheelOffsetTargetZ", "Wheel cam aim Z", " m", -2, 2, 0.01, 2, Conf::Low, "FH2 wheel camera.", 0, 0, "", false);
         K("FOVDegrees", "Wheel cam FOV", DEG, 10, 120, 0.5, 1, Conf::Low, "FH2 wheel camera.", 45, 0, "", false);
         K("WheelId", "Wheel cam wheel", "", 0, 3, 1, 0, Conf::Low, "FH2 wheel camera.", 2, K_INT, "", false);
-        g.push_back({ "Other", "Split screen, a cinematic camera and a debug preset. Mostly inert in normal play.", -1, v });
+        g.push_back({ "Other", "Split screen, a cinematic camera and a debug preset. Mostly inert in normal play.", -1, nullptr, v });
     }
     return g;
 }
@@ -281,6 +281,26 @@ const KeyInfo* findKey(const std::string& full) {
         for (auto& k : g.keys)
             if (k.key == full) return &k;
     return nullptr;
+}
+
+int groupOfKey(const std::string& key) {
+    auto& gs = cameraGroups();
+    for (size_t i = 0; i < gs.size(); i++)
+        for (auto& k : gs[i].keys)
+            if (k.key == key) return (int)i;
+    // unknown key: the group whose keys share its first path segment
+    std::string seg = key.substr(0, key.find('\\'));
+    for (size_t i = 0; i < gs.size(); i++)
+        for (auto& k : gs[i].keys)
+            if (k.key.compare(0, seg.size() + 1, seg + "\\") == 0) return (int)i;
+    return (int)gs.size() - 1;
+}
+
+int groupOfSection(const std::string& section) {
+    auto& gs = cameraGroups();
+    for (size_t i = 0; i < gs.size(); i++)
+        if (gs[i].section && section == gs[i].section) return (int)i;
+    return -1;
 }
 
 std::string builtinIni() {

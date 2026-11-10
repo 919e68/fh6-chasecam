@@ -64,6 +64,11 @@ struct Edits {
 std::string writeEdits(const Edits& e);
 bool readEdits(const std::string& text, Edits& e);
 
+// One camera's edits: its settings and its effect-layer section (camera group index from cameraGroups()).
+struct CameraChanges { int keys = 0; bool layers = false; };
+CameraChanges cameraChanges(const Edits& e, int group);
+void resetCamera(Edits& e, int group); // back to the loaded camera's values
+
 // Game files + edits (no drift setup)
 void applyEdits(const std::string& ini, const std::string& xml, const Edits& e, std::string& outIni, std::string& outXml);
 // Game files + edits + drift setup: what Save writes.

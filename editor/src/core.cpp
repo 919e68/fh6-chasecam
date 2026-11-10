@@ -153,6 +153,20 @@ std::string appendLayers(const std::string& t, const std::string& section, const
 }
 
 // ---------------------------------------------------------------------------
+CamParams noChangeParams(int slot) {
+    CamParams q;
+    q.slot = slot;
+    q.heightOfs = q.targetOfs = q.radiusOfs = q.fovAdd = q.maxFovAdd = 0;
+    q.follow = 1;
+    q.cornerAim = q.driftTilt = q.speedFov = 0;
+    return q;
+}
+
+bool isNoChange(const CamParams& p) {
+    return p.heightOfs == 0 && p.targetOfs == 0 && p.radiusOfs == 0 && p.fovAdd == 0 && p.maxFovAdd == 0 && p.follow == 1 &&
+           p.cornerAim == 0 && p.driftTilt == 0 && p.speedFov == 0;
+}
+
 std::vector<std::string> quickLayers(const CamParams& p) {
     double aim = (p.flipAim ? -1 : 1) * p.cornerAim, tilt = (p.flipTilt ? -1 : 1) * p.driftTilt;
     std::vector<std::string> add;

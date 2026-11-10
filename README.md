@@ -32,6 +32,7 @@ Three pages:
 
 - **Load camera** opens an existing camera as the starting point: the one in the game now, the one from before your first save, a camera mod's folder (it finds the two files inside a downloaded mod), or the original base. The files are copied next to the editor (`camera-loaded`), so saving to the game never overwrites what you are editing. Loading starts fresh: the drift setup is set to no change and your previous changes are kept in `fh6chasecam-edits.bak.txt`.
 - **Full screen preview**: the button on the preview, F11 or a double-click. Esc, F11 or a double-click exits.
+- **Reset camera** (Camera settings page) puts one camera back to the loaded camera: its settings, its effect layers and, if the drift setup is on it, the drift setup. It lists what will reset before it does. **Reset layers** on the Effect layers page resets only that camera's layers.
 - **Text size**: the Aa button top right (Normal, Large, Larger), or Ctrl + and Ctrl -. The whole window scales with it.
 
 How it fits together:
