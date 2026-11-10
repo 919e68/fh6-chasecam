@@ -34,6 +34,11 @@ static bool writePath(const fs::path& p, const std::string& data) {
     return (bool)f;
 }
 static std::string u8(const fs::path& p) { return p.u8string(); }
+
+// text size choices (Ctrl + / Ctrl -)
+static const float TEXT_SCALES[] = { 1.f, 1.15f, 1.3f };
+static const char* TEXT_NAMES[] = { "Normal", "Large", "Larger" };
+
 static fs::path fromU8(const std::string& s) { return fs::u8path(s); }
 
 static fs::path settingsFile() { return exeDir() / "fh6chasecam-editor.ini"; }
@@ -68,6 +73,7 @@ void App::loadSettings() {
         else if (k == "flipAim") p.flipAim = d != 0;
         else if (k == "flipTilt") p.flipTilt = d != 0;
         else if (k == "page") page = std::clamp((int)d, 0, 2);
+        else if (k == "textSize") setTextSize((int)d);
         else if (k == "setCam") setCam = std::clamp((int)d, 0, (int)fh6::cameraGroups().size() - 1);
         else if (k == "laySec") laySec = std::clamp((int)d, 0, (int)fh6::sections().size() - 1);
     }
@@ -83,7 +89,7 @@ void App::saveSettings() {
       << "\nmaxFovAdd=" << p.maxFovAdd << "\nfollow=" << p.follow << "\ncornerAim=" << p.cornerAim
       << "\ndriftTilt=" << p.driftTilt << "\nspeedFov=" << p.speedFov << "\ndriftSmooth=" << p.driftSmooth
       << "\nflipAim=" << p.flipAim << "\nflipTilt=" << p.flipTilt << "\npage=" << page << "\nsetCam=" << setCam
-      << "\nlaySec=" << laySec << "\n";
+      << "\nlaySec=" << laySec << "\ntextSize=" << textSize << "\n";
     writePath(settingsFile(), s.str());
     std::error_code ec;
     if (edits.empty()) fs::remove(editsFile(), ec);
@@ -432,6 +438,9 @@ void App::frame(float W, float H) {
     update(std::min(ImGui::GetIO().DeltaTime, 0.1f));
     if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S) && baseReal && buildError.empty()) saveToGame();
     if (ImGui::IsKeyPressed(ImGuiKey_F11, false)) setFull(!fullPreview);
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Equal) || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_KeypadAdd)) setTextSize(textSize + 1);
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Minus) || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_KeypadSubtract)) setTextSize(textSize - 1);
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_0)) setTextSize(0);
     else if (fullPreview && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopup)) setFull(false);
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(W, H));
@@ -493,7 +502,48 @@ void App::topBar(float w) {
     ImGui::SetCursorScreenPos(ImVec2(px, p0.y + h - sh));
     int pg = page;
     if (segmentTabs("page", &pg, pages, 3)) { page = pg; changed(); }
-    float sw = 0, tabsEnd = px + segmentTabsWidth(pages, 3);
+    float tabsEnd = px + segmentTabsWidth(pages, 3);
+
+    // text size, far right: "Aa" and a menu
+    float bs = ROW_H * S, sw = bs + SP4 * S;
+    ImVec2 ba(p0.x + w - g - bs, cy - bs / 2);
+    ImGui::SetCursorScreenPos(ba);
+    bool tclick = ImGui::InvisibleButton("##textsize", ImVec2(bs, bs));
+    bool thov = ImGui::IsItemHovered();
+    if (thov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    helpTooltip("Text size (Ctrl + and Ctrl -)");
+    if (thov) dl->AddRectFilled(ba, ImVec2(ba.x + bs, ba.y + bs), rgb(BG300));
+    dl->AddRect(ba, ImVec2(ba.x + bs, ba.y + bs), rgb(thov ? INK : LINE_STRONG), 0, HAIR * S);
+    float aw = textWidth(Body, "Aa");
+    drawText(dl, ImVec2(ba.x + (bs - aw) / 2, ba.y + (bs - textHeight(Body)) / 2 - 1 * S), Body, thov ? INK : INK_MUTED, "Aa");
+    if (tclick) ImGui::OpenPopup("##textmenu");
+    ImGui::SetNextWindowPos(ImVec2(ba.x + bs, ba.y + bs + SP2 * S), ImGuiCond_Always, ImVec2(1, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(1 * S, 1 * S));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(LINE_STRONG));
+    if (ImGui::BeginPopup("##textmenu")) {
+        ImDrawList* pl = ImGui::GetWindowDrawList();
+        float pw = 220 * S;
+        drawText(pl, ImVec2(ImGui::GetCursorScreenPos().x + SP3 * S, ImGui::GetCursorScreenPos().y + SP2 * S), Label, INK_MUTED, "Text size");
+        ImGui::Dummy(ImVec2(pw, 30 * S));
+        for (int i = 0; i < 3; i++) {
+            ImVec2 q = ImGui::GetCursorScreenPos();
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("##ts", ImVec2(pw, 34 * S))) { setTextSize(i); ImGui::CloseCurrentPopup(); }
+            bool ih = ImGui::IsItemHovered();
+            ImGui::PopID();
+            if (ih) pl->AddRectFilled(q, ImVec2(q.x + pw, q.y + 34 * S), rgb(BG300));
+            if (i == textSize) pl->AddRectFilled(q, ImVec2(q.x + RULE * S, q.y + 34 * S), rgb(ORANGE));
+            char pct[16];
+            std::snprintf(pct, sizeof pct, "%.0f %%", TEXT_SCALES[i] * 100);
+            drawText(pl, ImVec2(q.x + SP3 * S, q.y + 8 * S), Body, i == textSize || ih ? INK : INK_MUTED, TEXT_NAMES[i]);
+            drawText(pl, ImVec2(q.x + pw - SP3 * S - textWidth(Stat, pct), q.y + 9 * S), Stat, INK_MUTED, pct);
+        }
+        ImGui::Dummy(ImVec2(pw, SP2 * S));
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
 
     // Data Out status: a tag and a short note
     bool err = !rx.error().empty();
@@ -633,6 +683,12 @@ static void hudCard(ImDrawList* dl, ImVec2 anchor, bool alignRight, const std::v
     }
 }
 
+void App::setTextSize(int t) {
+    t = std::clamp(t, 0, 2);
+    if (t != textSize) { textSize = t; settingsSaveAt = fh6::nowSec() + 0.6; }
+    ui::textScale = TEXT_SCALES[t];
+}
+
 void App::setFull(bool on) {
     if (on == fullPreview) return;
     fullPreview = on;
@@ -690,7 +746,7 @@ void App::previewCard(float w, float h, bool compact, bool full) {
                 { { "Field of view", fov, nullptr, ON_GLASS }, { "View turn", std::string(aim) + "\xC2\xB0", nullptr, ON_GLASS },
                   { "Horizon tilt", std::string(tlt) + "\xC2\xB0", nullptr, ON_GLASS } }, Readout);
         float cw = textWidth(Caption, fh6::CAR_CREDIT);
-        drawText(dl, ImVec2((fa.x + fb.x - cw) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_DISABLED, fh6::CAR_CREDIT);
+        drawText(dl, ImVec2((fa.x + fb.x - cw) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_MUTED, fh6::CAR_CREDIT);
         return;
     }
     // the panel's cut corner and hairline over the scene, then the active-panel ticks
@@ -714,8 +770,8 @@ void App::previewCard(float w, float h, bool compact, bool full) {
         std::snprintf(fv, sizeof fv, "FOV %.0f\xC2\xB0", pose.fov);
         drawText(dl, ImVec2(fb.x - g - textWidth(Stat, fv), fa.y + g - 1 * S), Stat, INK_MUTED, fv);
         float cw0 = textWidth(Caption, fh6::CAR_CREDIT);
-        if (cw0 < fb.x - fa.x - 8 * S) drawText(dl, ImVec2((fa.x + fb.x - cw0) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_DISABLED, fh6::CAR_CREDIT);
-        else drawText(dl, ImVec2(fa.x + g, fb.y - SP1 * S - 14 * S), Caption, INK_DISABLED, "Car: VuckyZ, CC BY 4.0");
+        if (cw0 < fb.x - fa.x - 8 * S) drawText(dl, ImVec2((fa.x + fb.x - cw0) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_MUTED, fh6::CAR_CREDIT);
+        else drawText(dl, ImVec2(fa.x + g, fb.y - SP1 * S - 14 * S), Caption, INK_MUTED, "Car: VuckyZ, CC BY 4.0");
         return;
     }
     drawText(dl, ImVec2(fa.x + g, fa.y + g + 14 * S + SP1 * S), Caption, INK_MUTED,
@@ -736,7 +792,7 @@ void App::previewCard(float w, float h, bool compact, bool full) {
               { "Horizon tilt", std::string(tlt) + "\xC2\xB0", nullptr, ON_GLASS } }, Stat);
     // model attribution (CC BY), small and dim, bottom centre
     float cw = textWidth(Caption, fh6::CAR_CREDIT);
-    drawText(dl, ImVec2((fa.x + fb.x - cw) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_DISABLED, fh6::CAR_CREDIT);
+    drawText(dl, ImVec2((fa.x + fb.x - cw) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_MUTED, fh6::CAR_CREDIT);
 }
 
 // Chart panel: label and value, a hairline grid, the response curve in orange,

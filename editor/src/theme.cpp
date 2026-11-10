@@ -18,6 +18,7 @@
 namespace ui {
 
 float S = 1;
+float textScale = 1;
 static ImFont *oxM, *oxSB, *sans, *sansM, *mono, *monoM;
 
 void loadFonts() {
@@ -41,17 +42,17 @@ TypeStyle typeStyle(Style s) {
     case Headline: return { oxSB, 28, 0.02f, true };
     case Title: return { oxSB, 18, 0.04f, true };
     case Nav: return { oxM, 13, 0.14f, true };
-    case Label: return { oxM, 11, 0.16f, true };
+    case Label: return { oxM, 12, 0.14f, true };
     case Body: return { sans, 14, 0, false };
     case BodyStrong: return { sansM, 14, 0, false };
-    case Caption: return { sansM, 12, 0, false };
+    case Caption: return { sansM, 13, 0, false };
     case ReadoutXL: return { monoM, 56, -0.03f, false };
     case Readout: return { monoM, 20, 0, false };
-    case Stat: return { mono, 13, 0, false };
+    case Stat: return { mono, 14, 0, false };
     case BtnText: return { oxSB, 13, 0.12f, true };
     case BtnTextLg: return { oxSB, 16, 0.12f, true };
-    case Sub: return { sans, 11, 0.02f, false };
-    case Key: return { monoM, 10, 0, false };
+    case Sub: return { sans, 12, 0.02f, false };
+    case Key: return { monoM, 11, 0, false };
     case Lockup: return { oxSB, 18, 0.06f, true };
     }
     return { sans, 14, 0, false };

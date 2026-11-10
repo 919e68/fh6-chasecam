@@ -35,6 +35,8 @@ private:
     bool dirty = false;      // changed since the last save
     double settingsSaveAt = -1;
     int page = 0;            // 0 drift setup, 1 camera settings, 2 effect layers
+    int textSize = 0;        // 0 normal, 1 large, 2 larger
+    void setTextSize(int t);
 
     // the game's files (or the built-in stand-in for the preview) and what Save would write
     std::string baseIni, baseXml;

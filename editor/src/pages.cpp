@@ -232,7 +232,7 @@ void App::settingsKeys(float w, float h) {
         groupTitle("Other keys in this file", first);
         first = false;
         for (auto& k : unknown) {
-            double base = baseVals.count(k) ? baseVals.at(k) : 0, v = keyValue(k);
+            double base = baseVals.count(k) ? baseVals.at(k) : 0;
             double span = std::max(1.0, std::fabs(base) * 2);
             row(k, k.substr(k.rfind('\\') + 1).c_str(), "", base - span, base + span, span / 200, 3, base, "Not documented anywhere. Test in game.");
         }
@@ -245,7 +245,7 @@ void App::settingsKeys(float w, float h) {
             ImVec2 r0 = ImGui::GetCursorScreenPos();
             float rw2 = ImGui::GetContentRegionAvail().x, bw = buttonWidth("Add", Btn::Ghost);
             drawText(cl, ImVec2(r0.x, r0.y + 6 * S), Label, INK_MUTED, k->label.c_str());
-            drawText(cl, ImVec2(r0.x, r0.y + 22 * S), Caption, INK_DISABLED, k->key.c_str());
+            drawText(cl, ImVec2(r0.x, r0.y + 21 * S), Caption, INK_MUTED, k->key.c_str());
             ImGui::SetCursorScreenPos(ImVec2(r0.x + rw2 - bw + SP3 * S, r0.y));
             ImGui::PushID(k->key.c_str());
             if (button("Add", Btn::Ghost, false, bw)) { edits.ini[k->key] = fh6::fmtShort(k->def); selKey = k->key; editsChanged(); }
@@ -626,7 +626,7 @@ void App::layerList(float w, float h) {
             char ix[16];
             std::snprintf(ix, sizeof ix, "%d", idx + 1);
             float iw = textWidth(Key, "000");
-            drawText(cl, ImVec2(tx, p0.y + 8 * S), Key, INK_DISABLED, ix);
+            drawText(cl, ImVec2(tx, p0.y + 7 * S), Key, INK_MUTED, ix);
             tx += iw + SP2 * S;
             cl->PushClipRect(ImVec2(tx, p0.y), ImVec2(p1.x - SP3 * S, p1.y), true);
             drawText(cl, ImVec2(tx, p0.y + 4 * S), Body, on ? INK : INK_DISABLED, layerTitle(l).c_str());
@@ -845,8 +845,8 @@ static bool curveGraph(fh6::Layer& l, const char* pre, float w, float h, bool ed
     std::string hs = num(hi, 2);
     drawText(dl, ImVec2(gx1 - textWidth(Caption, hs.c_str()), gy1 + 3 * S), Caption, INK_MUTED, hs.c_str());
     std::string ys = num(yhi - ypad, 2), yl = num(ylo + ypad, 2);
-    drawText(dl, ImVec2(gx0 + 4 * S, gy0), Caption, INK_DISABLED, ys.c_str());
-    drawText(dl, ImVec2(gx0 + 4 * S, Y(ylo + ypad) - 16 * S), Caption, INK_DISABLED, yl.c_str());
+    drawText(dl, ImVec2(gx0 + 4 * S, gy0), Caption, INK_MUTED, ys.c_str());
+    drawText(dl, ImVec2(gx0 + 4 * S, Y(ylo + ypad) - 18 * S), Caption, INK_MUTED, yl.c_str());
     dl->AddRect(a, b, rgb(LINE), 0, HAIR * S);
     return changed;
 }

@@ -19,6 +19,7 @@ static const int DEF_W = 1120, DEF_H = 690, MIN_W = 900, MIN_H = 580;
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <windows.h>
+#include <algorithm>
 #include <cwchar>
 
 static ID3D11Device* gDev = nullptr;
@@ -63,6 +64,20 @@ fs::path pickFolder(const fs::path& start) {
     }
     dlg->Release();
     return out;
+}
+
+// Text size changed: scale the window with it, kept inside the monitor's work area.
+static void resizeForText(float ratio) {
+    DWORD style = (DWORD)GetWindowLongW(gHwnd, GWL_STYLE);
+    if (!(style & WS_OVERLAPPEDWINDOW) || IsZoomed(gHwnd)) return; // full screen or maximised: leave it
+    RECT r;
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetWindowRect(gHwnd, &r) || !GetMonitorInfoW(MonitorFromWindow(gHwnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+    RECT wa = mi.rcWork;
+    int w = std::min((int)((r.right - r.left) * ratio), (int)(wa.right - wa.left));
+    int h = std::min((int)((r.bottom - r.top) * ratio), (int)(wa.bottom - wa.top));
+    int x = std::clamp((int)r.left, (int)wa.left, (int)wa.right - w), y = std::clamp((int)r.top, (int)wa.top, (int)wa.bottom - h);
+    SetWindowPos(gHwnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOOWNERZORDER);
 }
 
 // Borderless full screen on the window's monitor, and back to the old placement.
@@ -134,8 +149,8 @@ static LRESULT WINAPI wndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     case WM_GETMINMAXINFO: {
         float s = ImGui_ImplWin32_GetDpiScaleForHwnd(h);
         MINMAXINFO* m = (MINMAXINFO*)l;
-        m->ptMinTrackSize.x = (LONG)(MIN_W * s);
-        m->ptMinTrackSize.y = (LONG)(MIN_H * s);
+        m->ptMinTrackSize.x = (LONG)(MIN_W * s * ui::textScale);
+        m->ptMinTrackSize.y = (LONG)(MIN_H * s * ui::textScale);
         return 0;
     }
     case WM_SYSCOMMAND:
@@ -188,6 +203,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     MainApp app;
     app.init();
+    float lastText = 1; // the window was sized for 100 % text
     const float clear[4] = { 0x16 / 255.f, 0x18 / 255.f, 0x1D / 255.f, 1 };
     bool done = false;
     while (!done) {
@@ -205,8 +221,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
             gResizeW = gResizeH = 0;
             createRtv();
         }
-        float s = ImGui_ImplWin32_GetDpiScaleForHwnd(gHwnd);
-        if (s != ui::S) ui::applyTheme(s);
+        float s = ImGui_ImplWin32_GetDpiScaleForHwnd(gHwnd) * ui::textScale;
+        if (s != ui::S) {
+            if (ui::textScale != lastText) resizeForText(ui::textScale / lastText);
+            lastText = ui::textScale;
+            ui::applyTheme(s);
+        }
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();

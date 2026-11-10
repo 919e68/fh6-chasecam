@@ -24,7 +24,8 @@ enum : int { SP1 = 4, SP2 = 8, SP3 = 12, SP4 = 16, SP6 = 24, SP8 = 32, SP12 = 48
 enum : int { CH_SM = 6, CH_MD = 10, CH_LG = 14 };
 constexpr float HAIR = 1, RULE = 2;
 
-extern float S; // DPI scale
+extern float S;         // UI scale: Windows display scaling x text size
+extern float textScale; // the user's text size (1, 1.15, 1.3)
 
 // Type styles
 enum Style { Headline, Title, Nav, Label, Body, BodyStrong, Caption, ReadoutXL, Readout, Stat, BtnText, BtnTextLg, Sub, Key, Lockup };
