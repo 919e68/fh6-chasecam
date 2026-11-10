@@ -65,6 +65,24 @@ fs::path pickFolder(const fs::path& start) {
     return out;
 }
 
+// Borderless full screen on the window's monitor, and back to the old placement.
+static WINDOWPLACEMENT gPlacement = { sizeof(WINDOWPLACEMENT) };
+void setFullscreen(bool on) {
+    DWORD style = (DWORD)GetWindowLongW(gHwnd, GWL_STYLE);
+    if (on && (style & WS_OVERLAPPEDWINDOW)) {
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetWindowPlacement(gHwnd, &gPlacement) && GetMonitorInfoW(MonitorFromWindow(gHwnd, MONITOR_DEFAULTTOPRIMARY), &mi)) {
+            SetWindowLongW(gHwnd, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(gHwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                         mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+    } else if (!on && !(style & WS_OVERLAPPEDWINDOW)) {
+        SetWindowLongW(gHwnd, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+        SetWindowPlacement(gHwnd, &gPlacement);
+        SetWindowPos(gHwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+}
+
 void openFolder(const fs::path& p) { ShellExecuteW(nullptr, L"open", p.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL); }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@
 #include "theme.hpp"
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -179,7 +180,136 @@ void App::findStock() {
     if (stockDir.empty() && hasPair(bak)) stockDir = bak;                                         // what was there before our first save
     if (stockDir.empty() && !fs::exists(bak, ec) && hasPair(outDir())) stockDir = outDir();      // another camera mod, not ours yet
     if (stockDir.empty() && hasPair(exeDir() / "camera-base")) stockDir = exeDir() / "camera-base"; // shipped with the editor
-    if (stockDir.empty()) stockNote = "No camera files to build on were found. Choose a folder that has CameraPhysics.xml and CameraSettings.ini.";
+    if (stockDir.empty()) stockNote = "No camera files to build on yet. Use Load camera to open some.";
+}
+
+// ---------------------------------------------------------------------------
+// Load camera: copy an existing camera into the editor's own folder and make it
+// the starting point. The copy keeps it safe from Save, which writes the game's folder.
+static bool hasPair(const fs::path& d) {
+    std::error_code ec;
+    return fs::exists(d / "CameraPhysics.xml", ec) && fs::exists(d / "CameraSettings.ini", ec);
+}
+
+// the folder itself, or the first folder inside it with both files (a downloaded mod: mediapc\Camera)
+static fs::path findPair(const fs::path& dir) {
+    if (hasPair(dir)) return dir;
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, fs::directory_options::skip_permission_denied, ec);
+         it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec) break;
+        if (it.depth() > 5) { it.disable_recursion_pending(); continue; }
+        if (it->is_directory(ec) && hasPair(it->path())) return it->path();
+    }
+    return fs::path();
+}
+
+static fh6::CamParams noChange(int slot) {
+    fh6::CamParams q;
+    q.slot = slot;
+    q.heightOfs = q.targetOfs = q.radiusOfs = q.fovAdd = q.maxFovAdd = 0;
+    q.follow = 1;
+    q.cornerAim = q.driftTilt = q.speedFov = 0;
+    return q;
+}
+
+void App::loadCamera(const fs::path& dir, const std::string& label) {
+    fs::path src = findPair(dir);
+    if (src.empty()) { say("Error", "No CameraPhysics.xml and CameraSettings.ini in " + u8(dir) + ".", DANGER); return; }
+    std::string ini, xml;
+    if (!readPath(src / "CameraSettings.ini", ini) || !readPath(src / "CameraPhysics.xml", xml)) {
+        say("Error", "Couldn't read the camera files in " + u8(src) + ".", DANGER);
+        return;
+    }
+    if (fh6::iniEntries(ini).empty() || fh6::xmlSections(xml).empty()) {
+        say("Error", "Those don't look like FH6 camera files.", DANGER);
+        return;
+    }
+    std::error_code ec;
+    fs::path dst = exeDir() / "camera-loaded";
+    fs::create_directories(dst, ec);
+    std::time_t t = std::time(nullptr);
+    char when[32];
+    std::strftime(when, sizeof when, "%b %d, %H:%M", std::localtime(&t));
+    if (!writePath(dst / "CameraSettings.ini", ini) || !writePath(dst / "CameraPhysics.xml", xml) ||
+        !writePath(dst / "source.txt", label + " (" + when + ")\r\n" + u8(src) + "\r\n")) {
+        say("Error", "Couldn't copy the camera next to the editor. Is its folder read-only?", DANGER);
+        return;
+    }
+    // start fresh: your changes are kept in a backup file, and the drift setup adds nothing
+    if (!edits.empty()) writePath(exeDir() / "fh6chasecam-edits.bak.txt", fh6::writeEdits(edits));
+    edits = fh6::Edits();
+    p = noChange(p.slot);
+    stockDir = dst;
+    stockNote.clear();
+    workFor.clear();
+    loadBase();
+    changed();
+    checkSaved();
+    say("Loaded", "Loaded " + label + ". Change it on any page, then Save to game.", COOL);
+}
+
+std::string App::baseLabel() const {
+    std::error_code ec;
+    if (stockDir.empty()) return "";
+    if (fs::equivalent(stockDir, exeDir() / "camera-loaded", ec)) {
+        std::string s;
+        if (readPath(stockDir / "source.txt", s)) return s.substr(0, s.find_first_of("\r\n"));
+        return "loaded";
+    }
+    if (fs::equivalent(stockDir, exeDir() / "camera-base", ec)) return "original base";
+    if (stockDir.filename() == "fh6chasecam-backup") return "from before your first save";
+    if (fs::exists(outDir(), ec) && fs::equivalent(stockDir, outDir(), ec)) return "camera mod in the game";
+    return u8(stockDir.filename());
+}
+
+void App::loadMenu(ImVec2 anchor) {
+    ImGui::SetNextWindowPos(ImVec2(anchor.x, anchor.y - SP2 * S), ImGuiCond_Always, ImVec2(0, 1));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(1 * S, 1 * S));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(LINE_STRONG));
+    if (ImGui::BeginPopup("##load")) {
+        ImDrawList* pl = ImGui::GetWindowDrawList();
+        float pw = 380 * S;
+        fs::path out = outDir(), bak = out / "fh6chasecam-backup", base = exeDir() / "camera-base";
+        struct Item { const char* name; std::string sub; fs::path dir; bool on; int kind; };
+        std::vector<Item> items;
+        bool inGame = !gameDir.empty() && hasPair(out);
+        items.push_back({ "Camera in the game now", inGame ? "mediapc\\camera in your game folder" : "No camera files in the game folder yet", out, inGame, 0 });
+        if (!gameDir.empty() && hasPair(bak)) items.push_back({ "Before your first save", "The camera files the game had before this editor saved", bak, true, 0 });
+        items.push_back({ "Open a folder\xE2\x80\xA6", "A camera mod you downloaded: pick its folder", fs::path(), true, 1 });
+        if (hasPair(base)) items.push_back({ "Original base", "camera-base, next to the editor", base, true, 0 });
+        for (size_t i = 0; i < items.size(); i++) {
+            const Item& it = items[i];
+            ImVec2 q = ImGui::GetCursorScreenPos();
+            ImGui::PushID((int)i);
+            bool hit = ImGui::InvisibleButton("##it", ImVec2(pw, 44 * S)) && it.on;
+            bool ih = it.on && ImGui::IsItemHovered();
+            ImGui::PopID();
+            if (ih) { pl->AddRectFilled(q, ImVec2(q.x + pw, q.y + 44 * S), rgb(BG300)); ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); }
+            drawText(pl, ImVec2(q.x + SP3 * S, q.y + 5 * S), Body, !it.on ? INK_DISABLED : ih ? INK : INK_MUTED, it.name);
+            drawText(pl, ImVec2(q.x + SP3 * S, q.y + 24 * S), Caption, it.on ? INK_MUTED : INK_DISABLED, it.sub.c_str());
+            if (hit) {
+                ImGui::CloseCurrentPopup();
+                if (it.kind == 1) {
+                    fs::path picked = pickFolder(gameDir);
+                    if (!picked.empty()) loadCamera(picked, u8(picked.filename()));
+                } else loadCamera(it.dir, i == 0 ? "in-game camera" : it.dir == bak ? "camera from before your first save" : "original base");
+            }
+        }
+        ImVec2 q = ImGui::GetCursorScreenPos();
+        pl->AddRectFilled(q, ImVec2(q.x + pw, q.y + HAIR * S), rgb(LINE));
+        ImGui::Dummy(ImVec2(pw, SP2 * S));
+        ImGui::SetCursorScreenPos(ImVec2(q.x + SP3 * S, ImGui::GetCursorScreenPos().y));
+        textWrapped(Caption, INK_MUTED,
+                    "Loading starts fresh: the drift setup is set to no change and your current changes are kept in "
+                    "fh6chasecam-edits.bak.txt.",
+                    pw - 2 * SP3 * S);
+        ImGui::Dummy(ImVec2(pw, SP2 * S));
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
 }
 
 bool App::stockOk() const {
@@ -301,10 +431,19 @@ void App::update(float dt) {
 void App::frame(float W, float H) {
     update(std::min(ImGui::GetIO().DeltaTime, 0.1f));
     if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S) && baseReal && buildError.empty()) saveToGame();
+    if (ImGui::IsKeyPressed(ImGuiKey_F11, false)) setFull(!fullPreview);
+    else if (fullPreview && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopup)) setFull(false);
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(W, H));
     ImGui::Begin("##root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse);
+    if (fullPreview) {
+        // the preview alone, edge to edge
+        ImGui::SetCursorPos(ImVec2(0, 0));
+        previewCard(W, H, false, true);
+        ImGui::End();
+        return;
+    }
     float g = SP4 * S;
     float topH = 44 * S, footH = 60 * S, leftW = 300 * S;
     ImGui::SetCursorPos(ImVec2(0, 0));
@@ -494,16 +633,66 @@ static void hudCard(ImDrawList* dl, ImVec2 anchor, bool alignRight, const std::v
     }
 }
 
-void App::previewCard(float w, float h, bool compact) {
+void App::setFull(bool on) {
+    if (on == fullPreview) return;
+    fullPreview = on;
+    fullSince = fh6::nowSec();
+    setFullscreen(on);
+}
+
+void App::previewCard(float w, float h, bool compact, bool full) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + w, a.y + h);
+    ImGui::SetNextItemAllowOverlap();
     ImGui::InvisibleButton("##preview", ImVec2(w, h));
+    bool dbl = ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0);
     // the game's 16:9 frame, as large as fits; the rest of the panel is dimmed
     ImVec2 ia(a.x + 1 * S, a.y + 1 * S), ib(b.x - 1 * S, b.y - 1 * S);
     float vw = ib.x - ia.x, vh = ib.y - ia.y;
     float fw = std::min(vw, vh * 16.f / 9.f), fh = fw * 9.f / 16.f;
     ImVec2 fa(ia.x + (vw - fw) / 2, ia.y + (vh - fh) / 2), fb(fa.x + fw, fa.y + fh);
+    if (full) { ia = a; ib = b; vw = w; vh = h; fw = std::min(vw, vh * 16.f / 9.f); fh = fw * 9.f / 16.f; fa = ImVec2(a.x + (vw - fw) / 2, a.y + (vh - fh) / 2); fb = ImVec2(fa.x + fw, fa.y + fh); }
     drawPreview(dl, ia, ib, fa, fb, pose, in, scene);
+    // full screen button, top right of the frame (double-click the preview does the same)
+    {
+        float bs = ROW_H * S, m = (compact ? SP3 : SP4) * S;
+        ImVec2 bp(fb.x - m - bs, fa.y + m);
+        dl->AddRectFilled(bp, ImVec2(bp.x + bs, bp.y + bs), glass(60));
+        ImGui::SetCursorScreenPos(bp);
+        if (iconButton(full ? "##exitfull" : "##full", full ? Icon::Collapse : Icon::Expand, true,
+                       full ? "Exit full screen (Esc, F11 or double-click)" : "Full screen (F11 or double-click)"))
+            dbl = true;
+        ImGui::SetCursorScreenPos(ImVec2(a.x, b.y));
+        ImGui::Dummy(ImVec2(0, 0));
+        if (dbl) setFull(!fullPreview);
+    }
+    if (full) {
+        // HUD only; a hint for the first seconds
+        float g = SP6 * S;
+        const char* which = fh6::SLOTS[stackSlot >= 0 ? stackSlot : 0].name;
+        std::string head = std::string(live ? "Your drive" : "Demo drive") + ", " + which;
+        drawText(dl, ImVec2(fa.x + g, fa.y + g), Label, INK_MUTED, head.c_str());
+        double since = fh6::nowSec() - fullSince;
+        if (since < 4) {
+            int al = (int)(255 * std::clamp(4 - since, 0.0, 1.0));
+            drawText(dl, ImVec2(fa.x + g, fa.y + g + 16 * S), Caption, INK_MUTED, "Esc, F11 or double-click to exit full screen", al);
+        }
+        char spd[32], ang[32], fov[32], aim[32], tlt[32];
+        double effect = fh6::curveAt(fh6::DRIFT_CURVE, std::fabs(in.slip));
+        std::snprintf(spd, sizeof spd, "%.0f", in.speed * 3.6);
+        std::snprintf(ang, sizeof ang, "%.0f\xC2\xB0", std::fabs(in.drift) * 180 / PI);
+        std::snprintf(fov, sizeof fov, "%.0f\xC2\xB0", pose.fov);
+        fmtNum(aim, sizeof aim, pose.aimDeg, 1, true);
+        fmtNum(tlt, sizeof tlt, pose.tiltDeg, 1, true);
+        hudCard(dl, ImVec2(fa.x + g, fb.y - g), false,
+                { { "Speed", spd, "km/h", ON_GLASS }, { "Drift angle", ang, nullptr, effect > 0.05 ? ORANGE_HOT : ON_GLASS } }, ReadoutXL);
+        hudCard(dl, ImVec2(fb.x - g, fb.y - g), true,
+                { { "Field of view", fov, nullptr, ON_GLASS }, { "View turn", std::string(aim) + "\xC2\xB0", nullptr, ON_GLASS },
+                  { "Horizon tilt", std::string(tlt) + "\xC2\xB0", nullptr, ON_GLASS } }, Readout);
+        float cw = textWidth(Caption, fh6::CAR_CREDIT);
+        drawText(dl, ImVec2((fa.x + fb.x - cw) / 2, fb.y - SP1 * S - 14 * S), Caption, INK_DISABLED, fh6::CAR_CREDIT);
+        return;
+    }
     // the panel's cut corner and hairline over the scene, then the active-panel ticks
     float cut = CH_LG * S;
     dl->AddTriangleFilled(ImVec2(b.x - cut, a.y), ImVec2(b.x + 1, a.y - 1), ImVec2(b.x + 1, a.y + cut), rgb(BG100));
@@ -618,6 +807,20 @@ void App::inputsStrip(float w, float h) {
     ImGui::Dummy(ImVec2(w, h));
 }
 
+// A path that fits maxW: leading folders give way to "...\" (the end of the path matters most)
+static std::string elidePath(const std::string& s, Style st, float maxW) {
+    if (textWidth(st, s.c_str()) <= maxW) return s;
+    std::string tail = s;
+    for (;;) {
+        size_t n = tail.find('\\', 1);
+        if (n == std::string::npos) break;
+        tail = tail.substr(n);
+        std::string t = "..." + tail;
+        if (textWidth(st, t.c_str()) <= maxW) return t;
+    }
+    return "..." + tail;
+}
+
 void App::footer(float w, float h) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -640,27 +843,24 @@ void App::footer(float w, float h) {
     ImGui::SetCursorScreenPos(ImVec2(p0.x + g, cy - 20 * S));
     if (button(gameDir.empty() ? "Choose folder" : "Change folder", Btn::Secondary)) {
         fs::path picked = pickFolder(gameDir);
-        if (!picked.empty()) { gameDir = picked; stockDir.clear(); findStock(); loadBase(); changed(); checkSaved(); }
+        if (!picked.empty()) {
+            gameDir = picked;
+            std::error_code ec;
+            if (!(stockOk() && fs::equivalent(stockDir, exeDir() / "camera-loaded", ec))) stockDir.clear(); // a loaded camera stays
+            findStock();
+            loadBase();
+            changed();
+            checkSaved();
+        }
     }
     helpTooltip("The Forza Horizon 6 folder: the one with forzahorizon6.exe (Steam), or its Content folder (Xbox app).");
     ImGui::SameLine(0, SP3 * S);
+    ImVec2 lp = ImGui::GetCursorScreenPos();
+    if (button("Load camera", Btn::Secondary)) ImGui::OpenPopup("##load");
+    helpTooltip("Open an existing camera to edit: the one in the game now, a camera mod's folder, or the original base.");
+    loadMenu(lp);
+    ImGui::SameLine(0, SP4 * S);
     float tx = ImGui::GetCursorScreenPos().x;
-    if (!stockNote.empty()) {
-        ImGui::SetCursorScreenPos(ImVec2(tx, cy - 20 * S));
-        if (button("Find camera files", Btn::Ghost)) {
-            fs::path picked = pickFolder(gameDir);
-            if (!picked.empty()) {
-                stockDir = picked;
-                stockNote = stockOk() ? "" : "That folder doesn't have CameraPhysics.xml and CameraSettings.ini.";
-                loadBase();
-                changed();
-                checkSaved();
-            }
-        }
-        helpTooltip("Pick the folder that has the game's own CameraPhysics.xml and CameraSettings.ini.");
-        ImGui::SameLine(0, SP4 * S);
-        tx = ImGui::GetCursorScreenPos().x;
-    }
     float textMax = p0.x + w - g - pw - SP3 * S - uw - SP4 * S - tx;
     std::string folder = gameDir.empty() ? "No game folder chosen" : u8(gameDir);
     std::string title, line;
@@ -670,7 +870,11 @@ void App::footer(float w, float h) {
     else if (!stockNote.empty()) { title = "Warning"; line = stockNote; tone = ORANGE; }
     else if (stockOk()) { title = dirty ? "Not saved" : "Saved"; line = dirty ? "The game doesn't have these settings yet." : "The game has these settings."; tone = dirty ? INK_MUTED : COOL; }
     dl->PushClipRect(ImVec2(tx, p0.y), ImVec2(tx + std::max(0.f, textMax), p0.y + h), true);
-    drawText(dl, ImVec2(tx, cy - 18 * S), Body, gameDir.empty() ? INK_MUTED : INK, folder.c_str());
+    std::string cam = stockOk() ? "Camera: " + baseLabel() : "";
+    float camW = cam.empty() ? 0 : std::min(textWidth(Body, cam.c_str()), textMax * 0.55f) + SP4 * S;
+    std::string shown = elidePath(folder, Body, std::max(60 * S, textMax - camW));
+    drawText(dl, ImVec2(tx, cy - 18 * S), Body, gameDir.empty() ? INK_MUTED : INK, shown.c_str());
+    if (!cam.empty()) drawText(dl, ImVec2(tx + textWidth(Body, shown.c_str()) + SP4 * S, cy - 18 * S), Body, INK_MUTED, cam.c_str());
     if (!line.empty()) {
         drawText(dl, ImVec2(tx, cy + 3 * S), Label, tone, title.c_str());
         drawText(dl, ImVec2(tx + textWidth(Label, title.c_str()) + SP2 * S, cy + 1 * S), Caption, INK, line.c_str());

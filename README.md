@@ -30,6 +30,9 @@ Three pages:
 ![Camera settings](docs/settings.png)
 ![Effect layers](docs/layers.png)
 
+- **Load camera** opens an existing camera as the starting point: the one in the game now, the one from before your first save, a camera mod's folder (it finds the two files inside a downloaded mod), or the original base. The files are copied next to the editor (`camera-loaded`), so saving to the game never overwrites what you are editing. Loading starts fresh: the drift setup is set to no change and your previous changes are kept in `fh6chasecam-edits.bak.txt`.
+- **Full screen preview**: the button on the preview, F11 or a double-click. Esc, F11 or a double-click exits.
+
 How it fits together:
 
 - **Save to game** (Ctrl+S) writes both files into `mediapc\camera`: the game's own files, then your key and layer edits, then the drift setup on its chase camera. Lines and layers you didn't touch stay byte-for-byte the same, layers are written in the game's attribute order, and `NumLayers` is always the real count. On first save it backs up any camera files already there; **Undo save** puts them back. Restart FH6 to load a new camera.

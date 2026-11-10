@@ -514,6 +514,18 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float sz, ImU32 col) {
         dl->PathArcTo(P(7, 6.5f), 2.5f * k, 3.14159f, 2 * 3.14159f, 10);
         dl->PathStroke(col, th);
         break;
+    case Icon::Expand:
+    case Icon::Collapse: {
+        // four corner brackets, pointing out (expand) or in (collapse)
+        bool out = icon == Icon::Expand;
+        for (int q = 0; q < 4; q++) {
+            float sx = (q & 1) ? -1.f : 1.f, sy = (q & 2) ? -1.f : 1.f;
+            auto C = [&](float x, float y) { return P(7 + sx * (x - 7), 7 + sy * (y - 7)); };
+            ImVec2 pts[3] = { C(1.5f, 5.f), out ? C(1.5f, 1.5f) : C(5.f, 5.f), C(5.f, 1.5f) };
+            dl->AddPolyline(pts, 3, col, th, 0);
+        }
+        break;
+    }
     case Icon::Search:
         dl->AddCircle(P(6, 6), 3.8f * k, col, 16, th);
         dl->AddLine(P(8.8f, 8.8f), P(12, 12), col, th);

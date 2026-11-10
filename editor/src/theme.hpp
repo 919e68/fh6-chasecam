@@ -67,7 +67,7 @@ void helpTooltip(const char* help);
 
 // Compact form controls (28 px rows)
 constexpr float ROW_H = 28;
-enum class Icon { Plus, Copy, Up, Down, Trash, Reset, Chevron, Lock, Search };
+enum class Icon { Plus, Copy, Up, Down, Trash, Reset, Chevron, Lock, Search, Expand, Collapse };
 void drawIcon(ImDrawList* dl, Icon icon, ImVec2 center, float size, ImU32 col);
 bool iconButton(const char* id, Icon icon, bool enabled = true, const char* help = nullptr, bool danger = false);
 // Number box: drag sideways to change (Shift fine, Ctrl coarse), double-click to type.

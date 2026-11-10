@@ -17,6 +17,7 @@ namespace fs = std::filesystem;
 fs::path pickFolder(const fs::path& start); // empty if cancelled
 fs::path exeDir();
 void openFolder(const fs::path& p);
+void setFullscreen(bool on);                // borderless full screen on the window's monitor
 
 class App {
 public:
@@ -97,7 +98,15 @@ private:
     void update(float dt);
     void topBar(float w);
     void controls(float w, float h);
-    void previewCard(float w, float h, bool compact = false);
+    void previewCard(float w, float h, bool compact = false, bool full = false);
+    // full screen preview
+    bool fullPreview = false;
+    double fullSince = 0;
+    void setFull(bool on);
+    // load an existing camera as the starting point
+    void loadMenu(ImVec2 anchor);
+    void loadCamera(const fs::path& dir, const std::string& label);
+    std::string baseLabel() const;
     void inputsStrip(float w, float h);
     void footer(float w, float h);
     void chartPanel(ImDrawList* dl, ImVec2 a, ImVec2 b, const char* title, const char* value, const std::vector<fh6::Pt>& curve,
