@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
             if (n == "Chase Far") farG = (int)i;
             if (n == "Hood") hoodG = (int)i;
         }
-        check(groupOfKey("FollowHighCam\\Spring\\YRotSpringK") == farG && groupOfKey("FollowHighCam\\Spring\\NotAKey") == farG &&
+        check(groupOfKey("FollowLowCam\\FOV") == nearG && groupOfKey("FollowHighCam\\Spring\\YRotSpringK") == farG && groupOfKey("FollowHighCam\\Spring\\NotAKey") == farG &&
                   groupOfKey("HoodCam\\FOV") == hoodG && groupOfSection("FollowCam2") == farG && groupOfSection("Copter") == -1,
               "key and section lookup");
         std::string bi = builtinIni(), bx = "<CameraPhysics>\n  <FollowCam NumLayers=\"1\">\n  " + lt + "\n  </FollowCam>\n  <FollowCam2 NumLayers=\"1\">\n  " + lt +
